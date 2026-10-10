@@ -33,6 +33,7 @@
   .fire:active { transform: scale(0.94); }
   .stunned { color: var(--player); }
   .scare { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: #fff; opacity: 0; }
+  .toast { position: fixed; z-index: 2; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 56px); transform: translateX(-50%); max-width: calc(100% - 32px); background: var(--panel); padding: 8px 14px; border-radius: 8px; font-weight: 600; text-align: center; pointer-events: none; }
   .over { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: rgba(5,8,6,0.6); }
   .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
   .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
@@ -46,6 +47,7 @@
 <div id="game"></div>
 <div class="vignette" id="vig"></div>
 <div class="scare" id="scare"></div>
+<div class="toast" id="toast" hidden></div>
 <div class="cross"></div>
 <button class="fire" id="fire" type="button">Огонь</button>
 <div class="hud"><span><span id="time">0.0 с</span> <span id="stun" class="stunned"></span></span><span class="right"><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><button id="snd" type="button">Звук: вкл</button></span></div>
@@ -54,6 +56,7 @@
   <div class="card">
     <h2>Ночной лес</h2>
     <p>Где-то в темноте бродит монстр. У тебя фонарик и пистолет на 6 патронов: попадание остановит монстра на 3 секунды. Слушай сердце: чем ближе он, тем чаще оно стучит.</p>
+    <p>С тобой верный пёс. Он лает, когда монстр рядом, и один раз спасёт тебя.</p>
     <p><strong>Осторожно:</strong> если он поймает, будет громкий скример.</p>
     <button id="go" type="button">Начать</button>
   </div>
@@ -598,6 +601,201 @@ let ammo = MAX_AMMO, reloading = 0, recoil = 0, flashT = 0, stun = 0, hitFlash =
 const ammoEl = document.getElementById('ammo'), stunEl = document.getElementById('stun');
 const ray = new THREE.Raycaster(), center = new THREE.Vector2(0, 0);
 monster.rotation.order = 'YXZ';
+
+// ---------- dog companion ----------
+const furTex = canvasTex(256, (x, s) => {
+  x.fillStyle = '#9a6430'; x.fillRect(0, 0, s, s);
+  for (let i = 0; i < 2600; i++) { // short fur strands
+    const px = Math.random() * s, py = Math.random() * s, a = 1.4 + rnd(-0.3, 0.3), l = rnd(3, 8);
+    x.strokeStyle = ['rgba(60,35,15,0.5)', 'rgba(190,130,70,0.45)', 'rgba(120,75,35,0.6)'][i % 3];
+    x.lineWidth = rnd(0.6, 1.4); x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke();
+  }
+}, 2);
+const saddleTex = canvasTex(256, (x, s) => {
+  x.fillStyle = '#2a1c12'; x.fillRect(0, 0, s, s);
+  for (let i = 0; i < 2200; i++) {
+    const px = Math.random() * s, py = Math.random() * s, l = rnd(3, 7);
+    x.strokeStyle = i % 2 ? 'rgba(10,6,4,0.6)' : 'rgba(90,60,35,0.4)'; x.lineWidth = rnd(0.6, 1.3);
+    x.beginPath(); x.moveTo(px, py); x.lineTo(px + rnd(-1, 1), py + l); x.stroke();
+  }
+}, 2);
+const creamTex = canvasTex(256, (x, s) => {
+  x.fillStyle = '#e2c9a0'; x.fillRect(0, 0, s, s);
+  for (let i = 0; i < 2000; i++) {
+    const px = Math.random() * s, py = Math.random() * s, l = rnd(2, 6);
+    x.strokeStyle = i % 2 ? 'rgba(170,130,85,0.4)' : 'rgba(250,240,220,0.5)'; x.lineWidth = rnd(0.5, 1.2);
+    x.beginPath(); x.moveTo(px, py); x.lineTo(px + rnd(-1, 1), py + l); x.stroke();
+  }
+}, 2);
+
+function makeDog() {
+  const g = new THREE.Group();
+  const fur = texMat(furTex, 0.9, { bumpScale: 0.03 }), saddle = texMat(saddleTex, 0.9, { bumpScale: 0.03 });
+  const cream = texMat(creamTex, 0.9, { bumpScale: 0.02 });
+  const black = mat(0x0c0a09, 0.25), pink = mat(0xc4606a, 0.4), eye = mat(0x2a1608, 0.15);
+  const glint = new THREE.MeshBasicMaterial({ color: 0xffffff }), collarM = mat(0xb02020, 0.5), gold = mat(0xd8b040, 0.3, { metalness: 0.7 });
+  const S = (r, w = 14, h = 10) => new THREE.SphereGeometry(r, w, h);
+  const Cy = (a, b, l, n = 10) => new THREE.CylinderGeometry(a, b, l, n);
+
+  const body = pivot(g, 0, 0.55, 0);
+  mesh(S(0.2, 18, 14), fur, 0, 0, -0.05, body).scale.set(0.95, 0.9, 1.9);
+  mesh(S(0.19, 16, 12), saddle, 0, 0.07, -0.08, body).scale.set(0.95, 0.6, 1.6); // dark back
+  mesh(S(0.2, 16, 12), fur, 0, 0.02, 0.24, body).scale.set(1, 1.08, 1);        // chest
+  mesh(S(0.13, 12, 10), cream, 0, -0.06, 0.36, body).scale.set(1, 1.2, 0.6);    // chest blaze
+  mesh(S(0.15, 12, 10), cream, 0, -0.1, -0.02, body).scale.set(0.9, 0.5, 1.6);  // belly
+  for (const s of [-1, 1]) mesh(S(0.1, 10, 8), fur, s * 0.1, 0.0, -0.33, body).scale.set(0.7, 1.15, 1.1); // haunches
+
+  const neck = pivot(body, 0, 0.1, 0.33); neck.rotation.x = -0.75;
+  mesh(Cy(0.085, 0.12, 0.26, 12), fur, 0, 0.12, 0, neck);
+  mesh(new THREE.TorusGeometry(0.098, 0.016, 8, 20), collarM, 0, 0.08, 0, neck).rotation.x = Math.PI / 2;
+  const tag = mesh(Cy(0.022, 0.022, 0.006, 12), gold, 0, 0.04, 0.115, neck); tag.rotation.x = Math.PI / 2;
+
+  const head = pivot(neck, 0, 0.27, 0.02); head.rotation.x = 0.85;
+  mesh(S(0.115, 16, 12), fur, 0, 0, 0, head).scale.set(1, 0.92, 1.05);
+  mesh(S(0.1, 12, 10), saddle, 0, 0.04, -0.02, head).scale.set(0.95, 0.6, 1);
+  mesh(S(0.07, 14, 10), cream, 0, -0.035, 0.12, head).scale.set(0.85, 0.75, 1.5); // muzzle
+  mesh(S(0.028, 10, 8), black, 0, -0.005, 0.22, head).scale.set(1.2, 0.85, 0.9); // nose
+  for (const s of [-1, 1]) mesh(S(0.007, 6, 4), mat(0x000000, 1), s * 0.01, -0.01, 0.245, head);  // nostrils
+  const jaw = pivot(head, 0, -0.07, 0.06);
+  mesh(S(0.05, 12, 8), cream, 0, 0, 0.08, jaw).scale.set(0.8, 0.45, 1.5);
+  const tongue = mesh(S(0.03, 10, 6), pink, 0, -0.01, 0.13, jaw); tongue.scale.set(0.9, 0.3, 1.6);
+  for (const s of [-1, 1]) {
+    mesh(S(0.022, 10, 8), eye, s * 0.052, 0.035, 0.085, head);
+    mesh(S(0.006, 6, 4), glint, s * 0.055, 0.045, 0.104, head);
+    mesh(S(0.018, 8, 6), cream, s * 0.05, 0.065, 0.08, head).scale.set(1.3, 0.5, 0.8); // brow spots
+    const ear = pivot(head, s * 0.075, 0.07, -0.02); ear.rotation.set(-0.2, 0, -s * 0.35);
+    const e = mesh(new THREE.ConeGeometry(0.05, 0.13, 3), fur, 0, 0.06, 0, ear); e.scale.set(1, 1, 0.35);
+    const ein = mesh(new THREE.ConeGeometry(0.032, 0.09, 3), pink, 0, 0.05, 0.012, ear); ein.scale.set(1, 1, 0.2);
+    g.userData['ear' + s] = ear;
+  }
+
+  const legs = [];
+  for (const [fx, fz, front] of [[-1, 0.28, true], [1, 0.28, true], [-1, -0.32, false], [1, -0.32, false]]) {
+    const hip = pivot(g, fx * 0.1, 0.5, fz);
+    mesh(Cy(0.048, 0.036, 0.25), front ? fur : saddle, 0, -0.12, front ? 0 : -0.02, hip);
+    const knee = pivot(hip, 0, -0.25, 0);
+    mesh(S(0.035, 8, 6), fur, 0, 0, 0, knee);
+    mesh(Cy(0.032, 0.028, 0.22), front ? cream : fur, 0, -0.11, 0, knee);
+    const paw = mesh(S(0.042, 10, 8), cream, 0, -0.23, 0.025, knee); paw.scale.set(1, 0.6, 1.35);
+    for (const t of [-1, 0, 1]) mesh(S(0.013, 6, 4), black, t * 0.02, -0.245, 0.075, knee);
+    legs.push({ hip, knee, front, side: fx });
+  }
+
+  let tail = pivot(g, 0, 0.62, -0.42); tail.rotation.x = -0.9;
+  const tailRoot = tail;
+  for (let i = 0; i < 5; i++) {
+    mesh(Cy(0.026 - i * 0.003, 0.034 - i * 0.003, 0.09, 8), i < 4 ? fur : cream, 0, 0.045, 0, tail);
+    tail = pivot(tail, 0, 0.09, 0); tail.rotation.x = 0.18;
+  }
+  return { g, body, head, jaw, legs, tail: tailRoot, phase: 0 };
+}
+const dog = makeDog();
+dog.g.rotation.order = 'YXZ';
+scene.add(dog.g);
+dog.state = 'follow'; dog.t = 0; dog.from = new THREE.Vector3(); dog.away = new THREE.Vector3(); dog.barkAt = 0;
+
+function animateDog(dt, speed, t) {
+  const amp = Math.min(1, speed / 5);
+  dog.phase += dt * (4 + speed * 2.2);
+  for (const l of dog.legs) {
+    const p = dog.phase + ((l.front ? 0 : Math.PI) + (l.side > 0 ? Math.PI : 0)); // trot: diagonal pairs
+    l.hip.rotation.x = Math.sin(p) * 0.6 * amp;
+    l.knee.rotation.x = (l.front ? -1 : 1) * Math.max(0, Math.cos(p)) * 0.7 * amp;
+  }
+  dog.body.position.y = 0.55 + Math.abs(Math.sin(dog.phase)) * 0.03 * amp;
+  dog.tail.rotation.z = Math.sin(t * (speed > 0.5 ? 10 : 14)) * 0.6;
+  dog.head.rotation.y = Math.sin(t * 1.3) * 0.25 * (1 - amp);
+  dog.jaw.rotation.x = 0.15 + amp * 0.15; // panting
+  for (const s of [-1, 1]) dog.g.userData['ear' + s].rotation.x = -0.2 + Math.sin(dog.phase * 2) * 0.15 * amp;
+}
+function bark() {
+  if (!actx || !soundOn) return;
+  const t = actx.currentTime;
+  for (const off of [0, 0.18]) {
+    const o = actx.createOscillator(), g = actx.createGain(), f = actx.createBiquadFilter();
+    o.type = 'square'; o.frequency.setValueAtTime(420, t + off); o.frequency.exponentialRampToValueAtTime(230, t + off + 0.1);
+    f.type = 'lowpass'; f.frequency.value = 1400;
+    g.gain.setValueAtTime(0.0001, t + off); g.gain.exponentialRampToValueAtTime(0.25, t + off + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.12);
+    o.connect(f).connect(g).connect(actx.destination); o.start(t + off); o.stop(t + off + 0.13);
+  }
+}
+function yelp() {
+  if (!actx || !soundOn) return;
+  const t = actx.currentTime;
+  for (const off of [0, 0.25, 0.5]) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(1300, t + off); o.frequency.exponentialRampToValueAtTime(700, t + off + 0.18);
+    g.gain.setValueAtTime(0.0001, t + off); g.gain.exponentialRampToValueAtTime(0.2, t + off + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.2);
+    o.connect(g).connect(actx.destination); o.start(t + off); o.stop(t + off + 0.21);
+  }
+}
+const toastEl = document.getElementById('toast');
+let toastT = 0;
+function toast(text, secs) { toastEl.textContent = text; toastEl.hidden = false; toastT = secs; }
+
+// the monster grabs you, but the dog leaps at it instead
+function dogSave() {
+  dog.state = 'leap'; dog.t = 0; dog.from.copy(dog.g.position);
+  const ax = monster.position.x - me.x, az = monster.position.z - me.z, l = Math.hypot(ax, az) || 1;
+  monster.position.x += ax / l * 2.2; monster.position.z += az / l * 2.2; // knocked back
+  pushOut(monster.position, 0.9);
+  stun = 4.5; hitFlash = 1; shriek(); noiseBurst(0.3, 0.8, 900);
+  toast('Собака бросилась на монстра и укусила его!', 3);
+}
+
+function updateDog(dt, t) {
+  const g = dog.g;
+  if (dog.state === 'gone') return;
+  if (dog.state === 'follow') {
+    const dx = me.x - g.position.x, dz = me.z - g.position.z, d = Math.hypot(dx, dz);
+    const speed = d > 2.2 ? Math.min(9, (d - 2.2) * 3 + 2) : 0;
+    if (speed) { g.position.x += dx / d * speed * dt; g.position.z += dz / d * speed * dt; g.rotation.y = Math.atan2(dx, dz); }
+    else { // stand and watch the monster
+      const mx = monster.position.x - g.position.x, mz = monster.position.z - g.position.z;
+      let dy = Math.atan2(mx, mz) - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      g.rotation.y += dy * Math.min(1, dt * 3);
+    }
+    pushOut(g.position, 0.3);
+    g.position.y = 0; g.rotation.x = 0; g.rotation.z = 0;
+    animateDog(dt, speed, t);
+    // bark when the monster is near
+    const md = Math.hypot(monster.position.x - g.position.x, monster.position.z - g.position.z);
+    if (md < 14 && stun <= 0 && t > dog.barkAt) { bark(); dog.barkAt = t + 1.1; dog.jaw.rotation.x = 0.5; }
+  } else if (dog.state === 'leap' || dog.state === 'bite') {
+    // latch onto the monster's arm, between it and you
+    const ax = me.x - monster.position.x, az = me.z - monster.position.z, l = Math.hypot(ax, az) || 1;
+    const tx = monster.position.x + ax / l * 0.75 + (-az / l) * 0.35, tz = monster.position.z + az / l * 0.75 + (ax / l) * 0.35;
+    dog.t += dt;
+    if (dog.state === 'leap') {
+      const k = Math.min(1, dog.t / 0.3);
+      g.position.set(dog.from.x + (tx - dog.from.x) * k, Math.sin(k * Math.PI / 2) * 1.0, dog.from.z + (tz - dog.from.z) * k);
+      g.rotation.set(-0.5, Math.atan2(monster.position.x - g.position.x, monster.position.z - g.position.z), 0);
+      dog.jaw.rotation.x = 0.7;
+      if (k >= 1) { dog.state = 'bite'; dog.t = 0; }
+    } else {
+      g.position.set(tx, 1.0 + Math.sin(dog.t * 40) * 0.03, tz);
+      g.rotation.set(-0.7, Math.atan2(-ax, -az), Math.sin(dog.t * 30) * 0.35); // shaking its head while biting
+      dog.jaw.rotation.x = 0.05 + Math.abs(Math.sin(dog.t * 20)) * 0.1;
+      for (const lg of dog.legs) lg.hip.rotation.x = Math.sin(dog.t * 25 + lg.side) * 0.5;
+      hitFlash = Math.max(hitFlash, 0.5);
+      if (dog.t > 1.0) {
+        dog.state = 'flee'; dog.t = 0; yelp();
+        // run off away from the monster, out past the fence
+        dog.away.set(-(monster.position.x - g.position.x), 0, -(monster.position.z - g.position.z)).normalize();
+        if (dog.away.lengthSq() === 0) dog.away.set(1, 0, 0);
+        toast('…и убежала в лес. Дальше ты один.', 3.5);
+      }
+    }
+  } else if (dog.state === 'flee') {
+    dog.t += dt;
+    g.position.x += dog.away.x * 10 * dt; g.position.z += dog.away.z * 10 * dt;
+    g.position.y = Math.max(0, g.position.y - dt * 4);
+    g.rotation.set(0, Math.atan2(dog.away.x, dog.away.z), 0);
+    animateDog(dt, 10, t);
+    if (dog.t > 5 || Math.hypot(g.position.x, g.position.z) > ARENA + 15) { dog.state = 'gone'; g.visible = false; }
+  }
+}
+
 const timeEl = document.getElementById('time'), bestEl = document.getElementById('best'), stamEl = document.getElementById('stam');
 const overEl = document.getElementById('over'), startEl = document.getElementById('start');
 const resultEl = document.getElementById('result'), vig = document.getElementById('vig');
@@ -612,6 +810,9 @@ function reset() {
   ammo = MAX_AMMO; reloading = 0; stun = 0; hitFlash = 0; hits = 0;
   scareT = 0; shake = 0; scareEl.style.opacity = 0; beast.head.rotation.x = -0.75;
   camera.fov = 55; camera.updateProjectionMatrix();
+  dog.state = 'follow'; dog.g.visible = true; dog.barkAt = 0;
+  dog.g.position.set(1.2, 0, 1.8); dog.g.rotation.set(0, Math.PI, 0);
+  toastEl.hidden = true; toastT = 0;
 }
 function pushOut(p, r) {
   for (const t of trees) {
@@ -788,7 +989,10 @@ function update(dt) {
     const t = actx.currentTime, gap = 1.1 - fear * 0.75, vol = 0.15 + fear * 0.6;
     thump(t, vol); thump(t + 0.18, vol * 0.7); nextBeat = t + gap;
   }
-  if (d < 1.5 && stun <= 0) {
+  updateDog(dt, time);
+  if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
+  if (d < 1.5 && stun <= 0 && dog.state === 'follow') dogSave();
+  else if (d < 1.5 && stun <= 0) {
     over = true; best = Math.max(best, time);
     resultEl.textContent = 'Ты продержался ' + time.toFixed(1) + ' с, попаданий: ' + hits;
     vig.style.opacity = 1; scareT = 0; scream();
