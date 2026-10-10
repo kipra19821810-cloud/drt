@@ -19,7 +19,7 @@
   body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; }
   #game { position: fixed; inset: 0; touch-action: none; }
   #game canvas { display: block; }
-  .hud { position: fixed; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 0; display: flex; justify-content: space-between; gap: 12px; pointer-events: none; font-family: var(--display); font-size: clamp(1rem, 4vw, 1.4rem); font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px #000; }
+  .hud { position: fixed; z-index: 2; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 0; display: flex; justify-content: space-between; gap: 12px; pointer-events: none; font-family: var(--display); font-size: clamp(1rem, 4vw, 1.4rem); font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px #000; }
   .vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 45%, var(--blood) 100%); opacity: 0; }
   .hud button { pointer-events: auto; font: 600 0.8rem var(--body); padding: 6px 10px; background: var(--panel); color: var(--fg); }
   .hint { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); margin: 0; text-align: center; color: var(--muted); font-size: 0.9rem; line-height: 1.5; pointer-events: none; }
@@ -27,7 +27,12 @@
   .stam { width: min(160px, 30vw); height: 8px; background: var(--panel); border-radius: 4px; overflow: hidden; align-self: center; }
   .stam i { display: block; height: 100%; width: 100%; background: var(--player); }
   .hud .right { display: flex; gap: 12px; align-items: center; }
-  .over { position: fixed; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: rgba(5,8,6,0.6); }
+  .cross { position: fixed; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid var(--fg); border-radius: 50%; opacity: 0.7; pointer-events: none; }
+  .cross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; background: var(--fg); border-radius: 50%; }
+  .fire { position: fixed; z-index: 2; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); width: 84px; height: 84px; border-radius: 50%; padding: 0; background: var(--monster); color: var(--fg); font: 400 1rem var(--display); box-shadow: 0 4px 16px rgba(0,0,0,0.5); touch-action: none; }
+  .fire:active { transform: scale(0.94); }
+  .stunned { color: var(--player); }
+  .over { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: rgba(5,8,6,0.6); }
   .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
   .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
   .card p { margin: 0; }
@@ -39,12 +44,14 @@
 
 <div id="game"></div>
 <div class="vignette" id="vig"></div>
-<div class="hud"><span id="time">0.0 с</span><span class="right"><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><button id="snd" type="button">Звук: вкл</button></span></div>
-<p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, <kbd>Shift</kbd> — бег (тратит выносливость), <kbd>Esc</kbd> — отпустить мышь. На телефоне: левая половина — идти, правая — смотреть.</p>
+<div class="cross"></div>
+<button class="fire" id="fire" type="button">Огонь</button>
+<div class="hud"><span><span id="time">0.0 с</span> <span id="stun" class="stunned"></span></span><span class="right"><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><button id="snd" type="button">Звук: вкл</button></span></div>
+<p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, клик, <kbd>Пробел</kbd> или кнопка «Огонь» — выстрел, <kbd>R</kbd> — перезарядка, <kbd>Shift</kbd> — бег. Попадание замораживает монстра на 3 секунды.</p>
 <div class="over" id="start">
   <div class="card">
     <h2>Ночной лес</h2>
-    <p>Где-то в темноте бродит монстр. У тебя только фонарик. Слушай сердце: чем ближе он, тем чаще оно стучит.</p>
+    <p>Где-то в темноте бродит монстр. У тебя фонарик и пистолет на 6 патронов: попадание остановит монстра на 3 секунды. Слушай сердце: чем ближе он, тем чаще оно стучит.</p>
     <button id="go" type="button">Начать</button>
   </div>
 </div>
@@ -150,7 +157,7 @@ function makeMonster() {
     for (const c of [-1, 0, 1]) { const cl = mesh(new THREE.ConeGeometry(0.03, 0.42, 6), bone, c * 0.06, -1.25, 0.04, el); cl.rotation.x = Math.PI - 0.3; }
     arms.push({ sh, el, s });
   }
-  return { g, legs, arms, head, jaw };
+  return { g, legs, arms, head, jaw, skin: [hide, flesh], eyeM, eyeGlow };
 }
 
 // ---------- heartbeat audio ----------
@@ -174,23 +181,56 @@ function roar() {
 
 
 const beast = makeMonster(), monster = beast.g; scene.add(monster);
+// invisible full-height hitbox so aiming at the body always counts
+const hitbox = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3.4, 1.4), new THREE.MeshBasicMaterial());
+hitbox.position.y = 1.7; hitbox.visible = false; monster.add(hitbox);
 
 // first-person camera with a flashlight in hand
 camera.rotation.order = 'YXZ';
 scene.add(camera);
 const flash = new THREE.SpotLight(0xfff0d0, 3.2, 28, 0.42, 0.55, 1.5);
-flash.position.set(0.25, -0.25, 0); flash.castShadow = true; flash.shadow.mapSize.set(1024, 1024);
+flash.position.set(0.17, -0.2, -0.5); flash.castShadow = true; flash.shadow.mapSize.set(1024, 1024);
 const flashTarget = new THREE.Object3D(); flashTarget.position.set(0, -0.3, -8);
 camera.add(flash, flashTarget); flash.target = flashTarget;
-const torch = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.32, 12), mat(0x2a2a2a, 0.4));
-torch.rotation.x = Math.PI / 2; torch.position.set(0.28, -0.28, -0.45); camera.add(torch);
-const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), mat(0xd9a07f, 0.6));
-hand.scale.set(0.9, 0.8, 1.4); hand.position.set(0.28, -0.32, -0.38); camera.add(hand);
+// pistol with an under-barrel light
+const gun = new THREE.Group(); camera.add(gun);
+const GUN_POS = new THREE.Vector3(0.2, -0.2, -0.62);
+gun.position.copy(GUN_POS); gun.scale.setScalar(0.75);
+const metal = mat(0x55595f, 0.4, { metalness: 0.3, emissive: 0x15171a });
+mesh(new THREE.BoxGeometry(0.06, 0.07, 0.28), metal, 0, 0.02, 0, gun);
+mesh(new THREE.BoxGeometry(0.05, 0.13, 0.07), metal, 0, -0.07, 0.08, gun).rotation.x = 0.25;
+const barrel = mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 8), metal, 0, 0.03, -0.16, gun); barrel.rotation.x = Math.PI / 2;
+mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.08, 10), mat(0x333333, 0.4), 0, -0.035, -0.08, gun).rotation.x = Math.PI / 2;
+const handM = mesh(new THREE.SphereGeometry(0.06, 10, 8), mat(0xd9a07f, 0.6, { emissive: 0x2a1810 }), 0, -0.08, 0.1, gun); handM.scale.set(1, 1.1, 1.3);
+const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffd080 }));
+muzzle.position.set(0, 0.03, -0.22); muzzle.visible = false; gun.add(muzzle);
+const muzzleLight = new THREE.PointLight(0xffb060, 0, 10, 2); muzzleLight.position.set(0, 0.03, -0.3); gun.add(muzzleLight);
+
+function noiseBurst(dur, vol, freq) {
+  if (!actx || !soundOn) return;
+  const t = actx.currentTime, buf = actx.createBuffer(1, actx.sampleRate * dur, actx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+  const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = buf; f.type = 'lowpass'; f.frequency.value = freq; g.gain.value = vol;
+  src.connect(f).connect(g).connect(actx.destination); src.start(t);
+}
+function shriek() {
+  if (!actx || !soundOn) return;
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = 'sawtooth'; o.frequency.setValueAtTime(420, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.6);
+  g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.7);
+}
 
 // ---------- state & input ----------
 const EYE = 1.65, keys = {};
 const me = { x: 0, z: 0, yaw: 0, pitch: 0 };
 let time, best = 0, over, started = false, stamina = 1, bob = 0;
+const MAX_AMMO = 6, STUN_TIME = 3, RELOAD_TIME = 1.4;
+let ammo = MAX_AMMO, reloading = 0, recoil = 0, flashT = 0, stun = 0, hitFlash = 0, hits = 0;
+const ammoEl = document.getElementById('ammo'), stunEl = document.getElementById('stun');
+const ray = new THREE.Raycaster(), center = new THREE.Vector2(0, 0);
+monster.rotation.order = 'YXZ';
 const timeEl = document.getElementById('time'), bestEl = document.getElementById('best'), stamEl = document.getElementById('stam');
 const overEl = document.getElementById('over'), startEl = document.getElementById('start');
 const resultEl = document.getElementById('result'), vig = document.getElementById('vig');
@@ -202,6 +242,7 @@ function reset() {
   monster.position.set(Math.sin(a) * 26, 0, Math.cos(a) * 26);
   time = 0; over = false; stamina = 1;
   overEl.hidden = true;
+  ammo = MAX_AMMO; reloading = 0; stun = 0; hitFlash = 0; hits = 0;
 }
 function pushOut(p, r) {
   for (const t of trees) {
@@ -212,9 +253,30 @@ function pushOut(p, r) {
   p.x = Math.max(-lim, Math.min(lim, p.x));
   p.z = Math.max(-lim, Math.min(lim, p.z));
 }
+function reload() {
+  if (reloading || ammo === MAX_AMMO || over || !started) return;
+  reloading = RELOAD_TIME; noiseBurst(0.05, 0.4, 3000);
+}
+function shoot() {
+  if (!started || over || reloading) return;
+  if (ammo <= 0) { noiseBurst(0.03, 0.3, 4000); reload(); return; }
+  ammo--; recoil = 1; flashT = 0.06;
+  noiseBurst(0.25, 1.2, 1800);
+  ray.setFromCamera(center, camera);
+  const hit = ray.intersectObject(hitbox)[0];
+  if (hit && hit.distance < 40) {
+    hits++;
+    hitFlash = 1;
+    if (stun <= 0) { stun = STUN_TIME; shriek(); } // a stunned monster can't be stunned longer
+  }
+  if (ammo === 0) setTimeout(reload, 250);
+}
 function lockMouse() { try { const r = renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
 function begin() { initAudio(); startEl.hidden = true; started = true; reset(); lockMouse(); }
 document.getElementById('go').addEventListener('click', begin);
+const fireBtn = document.getElementById('fire');
+fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); initAudio(); shoot(); });
+fireBtn.addEventListener('keydown', e => { if (e.key === 'Enter') shoot(); });
 document.getElementById('again').addEventListener('click', () => { reset(); lockMouse(); });
 
 addEventListener('keydown', e => {
@@ -222,7 +284,9 @@ addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k.startsWith('arrow') || k === ' ') e.preventDefault();
   keys[k] = true;
-  if (over && (k === 'r' || k === 'к' || k === 'enter')) { reset(); lockMouse(); }
+  if (over && k === 'enter') { reset(); lockMouse(); }
+  if (k === 'r' || k === 'к') reload();
+  if ((k === ' ' || k === 'f' || k === 'а') && !e.repeat) shoot();
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
@@ -241,7 +305,10 @@ const ptrs = new Map();
 let stick = null;
 root.addEventListener('pointerdown', e => {
   initAudio();
-  if (started && !over && e.pointerType === 'mouse') { lockMouse(); }
+  if (started && !over && e.pointerType === 'mouse') {
+    if (document.pointerLockElement === renderer.domElement) { if (e.button === 0) shoot(); return; }
+    lockMouse();
+  }
   const isMove = e.pointerType !== 'mouse' && e.clientX < innerWidth / 2;
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, move: isMove });
 });
@@ -292,15 +359,31 @@ function update(dt) {
 
   const mSpeed = 3.6 + time * 0.12;
   const mx = me.x - monster.position.x, mz = me.z - monster.position.z, d = Math.hypot(mx, mz);
-  if (d) { monster.position.x += mx / d * mSpeed * dt; monster.position.z += mz / d * mSpeed * dt; }
-  pushOut(monster.position, 0.9);
-  monster.rotation.y = Math.atan2(mx, mz);
-  mPhase += dt * mSpeed * 1.1;
-  animateLimbs(beast, mPhase, 0.55, 0.35, -1.0, -0.5);
-  for (const a of beast.arms) a.sh.rotation.x = -1.2 + Math.sin(mPhase * 2 + a.s) * 0.35;
-  beast.jaw.rotation.x = 0.25 + Math.abs(Math.sin(time * 3)) * 0.35;
-  beast.head.rotation.z = Math.sin(time * 1.7) * 0.15;
-  monster.position.y = Math.abs(Math.sin(mPhase)) * 0.12;
+  if (stun > 0) {
+    // frozen: slumped, twitching, eyes dimmed
+    stun = Math.max(0, stun - dt);
+    animateLimbs(beast, 0, 0, 0.6, -0.2, -0.2);
+    for (const a of beast.arms) a.sh.rotation.x = -0.1 + Math.sin(time * 40) * 0.03;
+    beast.jaw.rotation.x = 0.6;
+    beast.head.rotation.z = 0.4 + Math.sin(time * 37) * 0.05;
+    monster.rotation.x = -0.15;
+    monster.position.y = 0;
+    beast.eyeM.emissiveIntensity = 0.4; beast.eyeGlow.intensity = 0.3;
+  } else {
+    if (d) { monster.position.x += mx / d * mSpeed * dt; monster.position.z += mz / d * mSpeed * dt; }
+    pushOut(monster.position, 0.9);
+    monster.rotation.y = Math.atan2(mx, mz);
+    monster.rotation.x = 0;
+    mPhase += dt * mSpeed * 1.1;
+    animateLimbs(beast, mPhase, 0.55, 0.35, -1.0, -0.5);
+    for (const a of beast.arms) a.sh.rotation.x = -1.2 + Math.sin(mPhase * 2 + a.s) * 0.35;
+    beast.jaw.rotation.x = 0.25 + Math.abs(Math.sin(time * 3)) * 0.35;
+    beast.head.rotation.z = Math.sin(time * 1.7) * 0.15;
+    monster.position.y = Math.abs(Math.sin(mPhase)) * 0.12;
+    beast.eyeM.emissiveIntensity = 3; beast.eyeGlow.intensity = 2.2;
+  }
+  hitFlash = Math.max(0, hitFlash - dt * 4);
+  for (const m of beast.skin) m.emissive.setRGB(hitFlash * 0.7, 0, 0);
 
   const fear = Math.max(0, Math.min(1, 1 - (d - 2) / 16));
   vig.style.opacity = (fear * 0.9).toFixed(2);
@@ -308,15 +391,18 @@ function update(dt) {
     const t = actx.currentTime, gap = 1.1 - fear * 0.75, vol = 0.15 + fear * 0.6;
     thump(t, vol); thump(t + 0.18, vol * 0.7); nextBeat = t + gap;
   }
-  if (d < 1.5) {
+  if (d < 1.5 && stun <= 0) {
     over = true; best = Math.max(best, time);
-    resultEl.textContent = 'Ты продержался ' + time.toFixed(1) + ' с';
+    resultEl.textContent = 'Ты продержался ' + time.toFixed(1) + ' с, попаданий: ' + hits;
     overEl.hidden = false; vig.style.opacity = 1; roar();
     try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
   }
   timeEl.textContent = time.toFixed(1) + ' с';
   bestEl.textContent = best ? 'Рекорд ' + best.toFixed(1) + ' с' : '';
   stamEl.style.width = (stamina * 100).toFixed(0) + '%';
+  if (reloading) { reloading = Math.max(0, reloading - dt); if (!reloading) ammo = MAX_AMMO; }
+  ammoEl.textContent = reloading ? 'Перезарядка…' : 'Патроны ' + ammo + '/' + MAX_AMMO;
+  stunEl.textContent = stun > 0 ? 'Монстр заморожен ' + stun.toFixed(1) + ' с' : '';
 }
 
 function animateLimbs(rig, phase, amp, kneeBend, armBase, elbowBase) {
@@ -344,6 +430,12 @@ function loop(now) {
   update(dt);
   camera.position.set(me.x, EYE + Math.sin(bob) * 0.05, me.z);
   camera.rotation.set(me.pitch, me.yaw, Math.sin(bob * 0.5) * 0.012);
+  recoil = Math.max(0, recoil - dt * 8);
+  flashT = Math.max(0, flashT - dt);
+  muzzle.visible = flashT > 0; muzzleLight.intensity = flashT > 0 ? 4 : 0;
+  const dip = reloading ? Math.sin((1 - reloading / RELOAD_TIME) * Math.PI) : 0;
+  gun.position.set(GUN_POS.x, GUN_POS.y - dip * 0.15 + Math.sin(bob) * 0.008, GUN_POS.z + recoil * 0.07);
+  gun.rotation.set(recoil * 0.3 - dip * 0.9, 0, dip * 0.4);
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
