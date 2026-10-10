@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monster Chase 3D</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;600&display=swap">
+<style>
+  /* Layout: full-screen 3D scene, HUD pinned top, hint pinned bottom. Single dark night look by choice. */
+  :root {
+    --bg: #0c130f; --fg: #e8efe6; --muted: #a9bcad; --panel: rgba(12,19,15,0.72);
+    --monster: #e8483a; --player: #5cc8f0;
+    --display: "Russo One", "Arial Black", system-ui, sans-serif;
+    --body: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; }
+  #game { position: fixed; inset: 0; touch-action: none; }
+  #game canvas { display: block; }
+  .hud { position: fixed; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 0; display: flex; justify-content: space-between; gap: 12px; pointer-events: none; font-family: var(--display); font-size: clamp(1rem, 4vw, 1.4rem); font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px #000; }
+  .hint { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); margin: 0; text-align: center; color: var(--muted); font-size: 0.9rem; line-height: 1.5; pointer-events: none; }
+  kbd { font-family: var(--body); font-weight: 600; color: var(--fg); background: var(--panel); padding: 1px 6px; border-radius: 4px; }
+  .over { position: fixed; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: rgba(5,8,6,0.6); }
+  .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
+  .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
+  .card p { margin: 0; }
+  button { font: 600 1rem var(--body); color: var(--bg); background: var(--player); border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div id="game"></div>
+<div class="hud"><span id="time">0.0 с</span><span id="best"></span></div>
+<p class="hint">Беги: <kbd>WASD</kbd> или <kbd>←↑↓→</kbd>, на телефоне — тяни пальцем. Монстр ускоряется, деревья мешают обоим.</p>
+<div class="over" id="over" hidden>
+  <div class="card">
+    <h2>Поймал!</h2>
+    <p id="result"></p>
+    <button id="again" type="button">Ещё раз (R)</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const ARENA = 40;
+const root = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+root.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0c130f);
+scene.fog = new THREE.Fog(0x0c130f, 25, 70);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+
+scene.add(new THREE.HemisphereLight(0xb8d4ff, 0x2a3d2e, 0.9));
+const moon = new THREE.DirectionalLight(0xdfe8ff, 1.1);
+moon.position.set(15, 30, 10);
+moon.castShadow = true;
+moon.shadow.mapSize.set(2048, 2048);
+Object.assign(moon.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, far: 100 });
+scene.add(moon);
+
+// ground + fence posts marking the edge
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2 + 20, ARENA * 2 + 20), new THREE.MeshLambertMaterial({ color: 0x2e4a35 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const postGeo = new THREE.BoxGeometry(0.3, 1.2, 0.3), postMat = new THREE.MeshLambertMaterial({ color: 0x6b5236 });
+for (let i = -ARENA; i <= ARENA; i += 4) {
+  for (const [x, z] of [[i, -ARENA], [i, ARENA], [-ARENA, i], [ARENA, i]]) {
+    const p = new THREE.Mesh(postGeo, postMat); p.position.set(x, 0.6, z); p.castShadow = true; scene.add(p);
+  }
+}
+
+// trees act as obstacles (circle colliders)
+const trees = [];
+const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5a4030 }), leafMat = new THREE.MeshLambertMaterial({ color: 0x2f6b3a });
+for (let i = 0; i < 28; i++) {
+  const x = (Math.random() * 2 - 1) * (ARENA - 4), z = (Math.random() * 2 - 1) * (ARENA - 4);
+  if (Math.hypot(x, z) < 8) continue;
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 2, 8), trunkMat); trunk.position.y = 1;
+  const leaves = new THREE.Mesh(new THREE.ConeGeometry(1.8, 4, 8), leafMat); leaves.position.y = 4;
+  trunk.castShadow = leaves.castShadow = true;
+  g.add(trunk, leaves); g.position.set(x, 0, z); scene.add(g);
+  trees.push({ x, z, r: 0.9 });
+}
+
+// player: blue capsule-ish figure
+const player = new THREE.Group();
+const pMat = new THREE.MeshLambertMaterial({ color: 0x5cc8f0 });
+const pBody = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 16), pMat); pBody.position.y = 0.75;
+const pHead = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12), pMat); pHead.position.y = 1.6;
+pBody.castShadow = pHead.castShadow = true;
+player.add(pBody, pHead); scene.add(player);
+
+// monster: red blob with glowing eyes that look at you
+const monster = new THREE.Group();
+const mBody = new THREE.Mesh(new THREE.SphereGeometry(1.2, 24, 16), new THREE.MeshLambertMaterial({ color: 0xe8483a }));
+mBody.position.y = 1.2; mBody.castShadow = true; monster.add(mBody);
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0xfff3a0 }), pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+for (const s of [-1, 1]) {
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), eyeMat); eye.position.set(s * 0.45, 1.6, 1.0);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), pupilMat); pupil.position.set(s * 0.45, 1.6, 1.25);
+  monster.add(eye, pupil);
+}
+for (const s of [-1, 1]) {
+  const horn = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 8), new THREE.MeshLambertMaterial({ color: 0xf2e6d0 }));
+  horn.position.set(s * 0.6, 2.35, 0); horn.rotation.z = -s * 0.3; monster.add(horn);
+}
+const glow = new THREE.PointLight(0xff4030, 1.2, 8); glow.position.y = 1.5; monster.add(glow);
+scene.add(monster);
+
+// state
+const keys = {};
+let time, best = 0, over, mSpeed, drag = null;
+const timeEl = document.getElementById('time'), bestEl = document.getElementById('best');
+const overEl = document.getElementById('over'), resultEl = document.getElementById('result');
+
+function reset() {
+  player.position.set(0, 0, 0);
+  monster.position.set(0, 0, -25);
+  time = 0; over = false; mSpeed = 4;
+  overEl.hidden = true;
+}
+
+function pushOut(obj, r) {
+  for (const t of trees) {
+    const dx = obj.position.x - t.x, dz = obj.position.z - t.z, d = Math.hypot(dx, dz), min = t.r + r;
+    if (d < min && d > 0) { obj.position.x = t.x + dx / d * min; obj.position.z = t.z + dz / d * min; }
+  }
+  const lim = ARENA - r;
+  obj.position.x = Math.max(-lim, Math.min(lim, obj.position.x));
+  obj.position.z = Math.max(-lim, Math.min(lim, obj.position.z));
+}
+
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k.startsWith('arrow') || k === ' ') e.preventDefault();
+  keys[k] = true;
+  if (k === 'r' || k === 'к' || (over && k === 'enter')) reset();
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+root.addEventListener('pointerdown', e => { drag = { sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY }; });
+addEventListener('pointermove', e => { if (drag) { drag.x = e.clientX; drag.y = e.clientY; } });
+addEventListener('pointerup', () => { drag = null; });
+addEventListener('pointercancel', () => { drag = null; });
+document.getElementById('again').addEventListener('click', reset);
+
+function update(dt) {
+  if (over) return;
+  time += dt;
+  let dx = 0, dz = 0;
+  if (keys['arrowleft'] || keys['a'] || keys['ф']) dx--;
+  if (keys['arrowright'] || keys['d'] || keys['в']) dx++;
+  if (keys['arrowup'] || keys['w'] || keys['ц']) dz--;
+  if (keys['arrowdown'] || keys['s'] || keys['ы']) dz++;
+  if (drag) { const ox = drag.x - drag.sx, oy = drag.y - drag.sy; if (Math.hypot(ox, oy) > 12) { dx = ox; dz = oy; } }
+  const len = Math.hypot(dx, dz);
+  if (len) {
+    player.position.x += dx / len * 8 * dt;
+    player.position.z += dz / len * 8 * dt;
+    player.rotation.y = Math.atan2(dx, dz);
+    player.position.y = Math.abs(Math.sin(time * 14)) * 0.15; // running bob
+  }
+  pushOut(player, 0.5);
+
+  mSpeed = 4 + time * 0.18; // монстр постепенно ускоряется
+  const mx = player.position.x - monster.position.x, mz = player.position.z - monster.position.z, d = Math.hypot(mx, mz);
+  if (d) { monster.position.x += mx / d * mSpeed * dt; monster.position.z += mz / d * mSpeed * dt; }
+  pushOut(monster, 1.1);
+  monster.rotation.y = Math.atan2(mx, mz);
+  mBody.scale.set(1, 1 + Math.sin(time * 10) * 0.06, 1); // wobble
+  monster.position.y = Math.abs(Math.sin(time * 6)) * 0.3;
+
+  if (d < 1.6) {
+    over = true; best = Math.max(best, time);
+    resultEl.textContent = 'Ты продержался ' + time.toFixed(1) + ' с';
+    overEl.hidden = false;
+  }
+  timeEl.textContent = time.toFixed(1) + ' с';
+  bestEl.textContent = best ? 'Рекорд ' + best.toFixed(1) + ' с' : '';
+}
+
+function resize() {
+  const w = root.clientWidth, h = root.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+const camTarget = new THREE.Vector3();
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min((now - lastT) / 1000, 0.05); lastT = now;
+  update(dt);
+  camTarget.set(player.position.x, 13, player.position.z + 14);
+  camera.position.lerp(camTarget, 0.1);
+  camera.lookAt(player.position.x, 1, player.position.z);
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+reset(); resize();
+camera.position.set(0, 13, 14);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
