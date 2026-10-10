@@ -56,7 +56,7 @@
   <div class="card">
     <h2>Ночной лес</h2>
     <p>Где-то в темноте бродит монстр. У тебя фонарик и пистолет на 6 патронов: попадание остановит монстра на 3 секунды. Слушай сердце: чем ближе он, тем чаще оно стучит.</p>
-    <p>С тобой храбрая чихуахуа. Она тявкает, когда монстр рядом, и один раз спасёт тебя.</p>
+    <p>С тобой храбрая чихуахуа. Она бежит впереди, тявкает, когда монстр рядом, и один раз спасёт тебя: запрыгнет ему на голову и сделает массаж.</p>
     <p><strong>Осторожно:</strong> если он поймает, будет громкий скример.</p>
     <button id="go" type="button">Начать</button>
   </div>
@@ -692,6 +692,7 @@ function makeDog() {
   return { g, body, head, jaw, legs, tail: tailRoot, phase: 0, bodyY: 0.21 };
 }
 const dog = makeDog();
+dog.g.scale.setScalar(1.5);
 dog.g.rotation.order = 'YXZ';
 scene.add(dog.g);
 dog.state = 'follow'; dog.t = 0; dog.from = new THREE.Vector3(); dog.away = new THREE.Vector3(); dog.barkAt = 0;
@@ -736,66 +737,116 @@ const toastEl = document.getElementById('toast');
 let toastT = 0;
 function toast(text, secs) { toastEl.textContent = text; toastEl.hidden = false; toastT = secs; }
 
-// the monster grabs you, but the dog leaps at it instead
+// the monster grabs you, but the chihuahua leaps onto its head
 function dogSave() {
   dog.state = 'leap'; dog.t = 0; dog.from.copy(dog.g.position);
   const ax = monster.position.x - me.x, az = monster.position.z - me.z, l = Math.hypot(ax, az) || 1;
-  monster.position.x += ax / l * 4; monster.position.z += az / l * 4; // knocked back
+  monster.position.x += ax / l * 4; monster.position.z += az / l * 4; // staggers back in surprise
   pushOut(monster.position, 0.9);
-  stun = 4.5; hitFlash = 1; shriek(); noiseBurst(0.3, 0.8, 900);
-  toast('Чихуахуа бросилась на монстра и вцепилась ему в ногу!', 3);
+  stun = 7; bark();
+  toast('Чихуахуа запрыгнула монстру на голову!', 2.5);
 }
+
+// little hearts that float up while the monster enjoys the massage
+const heartTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  x.fillStyle = '#ff5c8a'; x.beginPath(); x.moveTo(32, 54);
+  x.bezierCurveTo(4, 34, 8, 8, 32, 20); x.bezierCurveTo(56, 8, 60, 34, 32, 54); x.fill();
+  return new THREE.CanvasTexture(c);
+})();
+const hearts = Array.from({ length: 6 }, () => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: heartTex, transparent: true, depthWrite: false, fog: false }));
+  s.scale.setScalar(0.35); s.visible = false; scene.add(s); s.userData.t = 99; return s;
+});
+let heartAt = 0;
+const headTop = new THREE.Vector3();
 
 function updateDog(dt, t) {
   const g = dog.g;
   if (dog.state === 'gone') return;
   if (dog.state === 'follow') {
-    const dx = me.x - g.position.x, dz = me.z - g.position.z, d = Math.hypot(dx, dz);
-    const speed = d > 1.6 ? Math.min(9, (d - 1.6) * 3 + 2) : 0;
-    if (speed) { g.position.x += dx / d * speed * dt; g.position.z += dz / d * speed * dt; g.rotation.y = Math.atan2(dx, dz); }
-    else { // stand and watch the monster
+    // trot a little ahead of you, in the flashlight beam, so you can see her
+    const sx = Math.sin(me.yaw), cz = Math.cos(me.yaw);
+    const gx = me.x - sx * 4.2 + cz * 0.7, gz = me.z - cz * 4.2 - sx * 0.7;
+    const dx = gx - g.position.x, dz = gz - g.position.z, d = Math.hypot(dx, dz);
+    const speed = d > 0.4 ? Math.min(12, d * 4 + 1) : 0;
+    if (speed) {
+      g.position.x += dx / d * Math.min(d, speed * dt); g.position.z += dz / d * Math.min(d, speed * dt);
+      g.rotation.y = Math.atan2(dx, dz);
+    } else { // stand and watch the monster
       const mx = monster.position.x - g.position.x, mz = monster.position.z - g.position.z;
       let dy = Math.atan2(mx, mz) - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       g.rotation.y += dy * Math.min(1, dt * 3);
     }
-    pushOut(g.position, 0.3);
+    pushOut(g.position, 0.25);
     g.position.y = 0; g.rotation.x = 0; g.rotation.z = 0;
-    animateDog(dt, speed, t);
-    // bark when the monster is near
+    animateDog(dt, speed > 0.5 ? Math.min(speed, 8) : 0, t);
     const md = Math.hypot(monster.position.x - g.position.x, monster.position.z - g.position.z);
     if (md < 14 && stun <= 0 && t > dog.barkAt) { bark(); dog.barkAt = t + 1.1; dog.jaw.rotation.x = 0.5; }
-  } else if (dog.state === 'leap' || dog.state === 'bite') {
-    // latch onto the monster's arm, between it and you
-    const ax = me.x - monster.position.x, az = me.z - monster.position.z, l = Math.hypot(ax, az) || 1;
-    const tx = monster.position.x + ax / l * 0.3 + (-az / l) * 0.38, tz = monster.position.z + az / l * 0.3 + (ax / l) * 0.38;
+    return;
+  }
+  // top of the monster's skull, between the horns
+  monster.updateMatrixWorld(true);
+  beast.head.localToWorld(headTop.set(0, 0.42, 0.02));
+  if (dog.state === 'leap' || dog.state === 'massage') {
+    // keep the camera on the show
+    const hx = headTop.x - me.x, hz = headTop.z - me.z;
+    let dy = Math.atan2(-hx, -hz) - me.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    me.yaw += dy * Math.min(1, dt * 3);
+    me.pitch += (Math.atan2(headTop.y - 1.65, Math.hypot(hx, hz)) - me.pitch) * Math.min(1, dt * 3);
+  }
+  if (dog.state === 'leap') {
     dog.t += dt;
-    if (dog.state === 'leap') {
-      const k = Math.min(1, dog.t / 0.3);
-      g.position.set(dog.from.x + (tx - dog.from.x) * k, Math.sin(k * Math.PI / 2) * 0.55, dog.from.z + (tz - dog.from.z) * k);
-      g.rotation.set(-0.5, Math.atan2(monster.position.x - g.position.x, monster.position.z - g.position.z), 0);
-      dog.jaw.rotation.x = 0.7;
-      if (k >= 1) { dog.state = 'bite'; dog.t = 0; }
-    } else {
-      g.position.set(tx, 0.55 + Math.sin(dog.t * 40) * 0.02, tz); // hanging off the monster's leg
-      g.rotation.set(-0.7, Math.atan2(-ax, -az), Math.sin(dog.t * 30) * 0.35); // shaking its head while biting
-      dog.jaw.rotation.x = 0.05 + Math.abs(Math.sin(dog.t * 20)) * 0.1;
-      for (const lg of dog.legs) lg.hip.rotation.x = Math.sin(dog.t * 25 + lg.side) * 0.5;
-      hitFlash = Math.max(hitFlash, 0.5);
-      if (dog.t > 1.0) {
-        dog.state = 'flee'; dog.t = 0; yelp();
-        // run off away from the monster, out past the fence
-        dog.away.set(-(monster.position.x - g.position.x), 0, -(monster.position.z - g.position.z)).normalize();
-        if (dog.away.lengthSq() === 0) dog.away.set(1, 0, 0);
-        toast('…и убежала в лес. Дальше ты один.', 3.5);
-      }
+    const k = Math.min(1, dog.t / 0.6);
+    g.position.set(dog.from.x + (headTop.x - dog.from.x) * k, dog.from.y + (headTop.y - dog.from.y) * k + Math.sin(k * Math.PI) * 1.2, dog.from.z + (headTop.z - dog.from.z) * k);
+    g.rotation.set(-0.4 + k * 0.4, Math.atan2(headTop.x - dog.from.x, headTop.z - dog.from.z), 0);
+    for (const lg of dog.legs) lg.hip.rotation.x = lg.front ? -1.1 : 0.9; // stretched out mid-air
+    dog.tail.rotation.z = 0;
+    if (k >= 1) { dog.state = 'massage'; dog.t = 0; toast('…и делает ему массаж лапками. Монстр замер от удовольствия!', 4); }
+  } else if (dog.state === 'massage') {
+    dog.t += dt;
+    stun = Math.max(stun, 2.5);
+    g.position.copy(headTop); g.position.y += Math.abs(Math.sin(dog.t * 10)) * 0.015;
+    g.rotation.set(0.15, monster.rotation.y, 0);
+    for (const lg of dog.legs) {
+      if (lg.front) { // kneading, left and right paw in turn
+        const p = dog.t * 9 + (lg.side > 0 ? Math.PI : 0);
+        lg.hip.rotation.x = -0.5 + Math.sin(p) * 0.55;
+        lg.knee.rotation.x = -0.4 - Math.max(0, Math.cos(p)) * 0.6;
+      } else { lg.hip.rotation.x = 0.9; lg.knee.rotation.x = -1.2; } // sitting on the haunches
+    }
+    dog.body.rotation.x = -0.25; dog.body.rotation.z = Math.sin(dog.t * 9) * 0.06;
+    dog.tail.rotation.z = Math.sin(t * 16) * 0.7;
+    dog.head.rotation.y = Math.sin(dog.t * 2) * 0.3;
+    dog.jaw.rotation.x = 0.3; // happy pant
+    if (t > heartAt) { // pop a heart
+      heartAt = t + 0.35;
+      const h = hearts.find(s => s.userData.t > 1.4);
+      if (h) { h.userData.t = 0; h.userData.x = headTop.x + rnd(-0.4, 0.4); h.userData.z = headTop.z + rnd(-0.4, 0.4); h.userData.y = headTop.y + 0.2; h.visible = true; }
+    }
+    if (dog.t > 4.5) {
+      dog.state = 'flee'; dog.t = 0; yelp(); dog.body.rotation.set(0, 0, 0);
+      dog.away.set(-(monster.position.x - me.x), 0, -(monster.position.z - me.z)).normalize();
+      dog.away.set(-dog.away.z, 0, dog.away.x); // dash off to the side, into the trees
+      stun = 2.5;
+      toast('Чихуахуа спрыгнула и убежала в лес. Дальше ты один.', 3.5);
     }
   } else if (dog.state === 'flee') {
     dog.t += dt;
     g.position.x += dog.away.x * 10 * dt; g.position.z += dog.away.z * 10 * dt;
-    g.position.y = Math.max(0, g.position.y - dt * 4);
+    g.position.y = Math.max(0, g.position.y - dt * 6);
     g.rotation.set(0, Math.atan2(dog.away.x, dog.away.z), 0);
-    animateDog(dt, 10, t);
+    animateDog(dt, 8, t);
     if (dog.t > 5 || Math.hypot(g.position.x, g.position.z) > ARENA + 15) { dog.state = 'gone'; g.visible = false; }
+  }
+}
+function updateHearts(dt) {
+  for (const h of hearts) {
+    if (!h.visible) continue;
+    h.userData.t += dt;
+    h.position.set(h.userData.x + Math.sin(h.userData.t * 6) * 0.1, h.userData.y + h.userData.t * 0.9, h.userData.z);
+    h.material.opacity = Math.max(0, 1 - h.userData.t / 1.4);
+    if (h.userData.t > 1.4) h.visible = false;
   }
 }
 
@@ -814,7 +865,8 @@ function reset() {
   scareT = 0; shake = 0; scareEl.style.opacity = 0; beast.head.rotation.x = -0.75;
   camera.fov = 55; camera.updateProjectionMatrix();
   dog.state = 'follow'; dog.g.visible = true; dog.barkAt = 0;
-  dog.g.position.set(0.8, 0, 1.3); dog.g.rotation.set(0, Math.PI, 0);
+  dog.g.position.set(0.7, 0, -4.2); dog.g.rotation.set(0, Math.PI, 0); dog.body.rotation.set(0, 0, 0);
+  for (const h of hearts) { h.visible = false; h.userData.t = 99; }
   toastEl.hidden = true; toastT = 0;
 }
 function pushOut(p, r) {
@@ -964,10 +1016,17 @@ function update(dt) {
     // frozen: slumped, twitching, eyes dimmed
     stun = Math.max(0, stun - dt);
     animateLimbs(beast, 0, 0, 0.6, -0.2, -0.2);
-    for (const a of beast.arms) a.sh.rotation.x = -0.1 + Math.sin(time * 40) * 0.03;
-    beast.jaw.rotation.x = 0.6;
-    beast.head.rotation.z = 0.4 + Math.sin(time * 37) * 0.05;
-    monster.rotation.x = -0.15;
+    if (dog.state === 'massage') { // melting with pleasure: slow sway, slack jaw, arms dangling
+      for (const a of beast.arms) a.sh.rotation.x = Math.sin(time * 1.5 + a.s) * 0.08;
+      beast.jaw.rotation.x = 0.35;
+      beast.head.rotation.z = Math.sin(time * 1.8) * 0.18;
+      monster.rotation.x = 0;
+    } else {
+      for (const a of beast.arms) a.sh.rotation.x = -0.1 + Math.sin(time * 40) * 0.03;
+      beast.jaw.rotation.x = 0.6;
+      beast.head.rotation.z = 0.4 + Math.sin(time * 37) * 0.05;
+      monster.rotation.x = -0.15;
+    }
     monster.position.y = 0;
     beast.eyeM.emissiveIntensity = 0.4; beast.eyeGlow.intensity = 0.3;
   } else {
@@ -992,7 +1051,7 @@ function update(dt) {
     const t = actx.currentTime, gap = 1.1 - fear * 0.75, vol = 0.15 + fear * 0.6;
     thump(t, vol); thump(t + 0.18, vol * 0.7); nextBeat = t + gap;
   }
-  updateDog(dt, time);
+  updateDog(dt, time); updateHearts(dt);
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
   if (d < 1.5 && stun <= 0 && dog.state === 'follow') dogSave();
   else if (d < 1.5 && stun <= 0) {
