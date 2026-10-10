@@ -737,7 +737,7 @@ function toast(text, secs) { toastEl.textContent = text; toastEl.hidden = false;
 function dogSave() {
   dog.state = 'leap'; dog.t = 0; dog.from.copy(dog.g.position);
   const ax = monster.position.x - me.x, az = monster.position.z - me.z, l = Math.hypot(ax, az) || 1;
-  monster.position.x += ax / l * 2.2; monster.position.z += az / l * 2.2; // knocked back
+  monster.position.x += ax / l * 4; monster.position.z += az / l * 4; // knocked back
   pushOut(monster.position, 0.9);
   stun = 4.5; hitFlash = 1; shriek(); noiseBurst(0.3, 0.8, 900);
   toast('Собака бросилась на монстра и укусила его!', 3);
