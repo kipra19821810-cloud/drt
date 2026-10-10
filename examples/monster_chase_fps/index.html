@@ -32,6 +32,7 @@
   .fire { position: fixed; z-index: 2; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); width: 84px; height: 84px; border-radius: 50%; padding: 0; background: var(--monster); color: var(--fg); font: 400 1rem var(--display); box-shadow: 0 4px 16px rgba(0,0,0,0.5); touch-action: none; }
   .fire:active { transform: scale(0.94); }
   .stunned { color: var(--player); }
+  .scare { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: #fff; opacity: 0; }
   .over { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: rgba(5,8,6,0.6); }
   .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
   .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
@@ -44,6 +45,7 @@
 
 <div id="game"></div>
 <div class="vignette" id="vig"></div>
+<div class="scare" id="scare"></div>
 <div class="cross"></div>
 <button class="fire" id="fire" type="button">Огонь</button>
 <div class="hud"><span><span id="time">0.0 с</span> <span id="stun" class="stunned"></span></span><span class="right"><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><button id="snd" type="button">Звук: вкл</button></span></div>
@@ -52,6 +54,7 @@
   <div class="card">
     <h2>Ночной лес</h2>
     <p>Где-то в темноте бродит монстр. У тебя фонарик и пистолет на 6 патронов: попадание остановит монстра на 3 секунды. Слушай сердце: чем ближе он, тем чаще оно стучит.</p>
+    <p><strong>Осторожно:</strong> если он поймает, будет громкий скример.</p>
     <button id="go" type="button">Начать</button>
   </div>
 </div>
@@ -545,6 +548,28 @@ const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.Me
 muzzle.position.set(0, 0.045, -0.2); muzzle.visible = false; gun.add(muzzle);
 const muzzleLight = new THREE.PointLight(0xffb060, 0, 10, 2); muzzleLight.position.set(0, 0.03, -0.3); gun.add(muzzleLight);
 
+function scream() {
+  if (!actx || !soundOn) return;
+  const t = actx.currentTime, out = actx.createGain(), shaper = actx.createWaveShaper();
+  const curve = new Float32Array(1024);
+  for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; curve[i] = Math.tanh(x * 30); }
+  shaper.curve = curve;
+  out.gain.setValueAtTime(0.0001, t); out.gain.exponentialRampToValueAtTime(0.7, t + 0.02);
+  out.gain.setValueAtTime(0.7, t + 1.1); out.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+  shaper.connect(out).connect(actx.destination);
+  for (const f of [310, 467, 622, 893, 1240]) { // dissonant shrieking voices with fast vibrato
+    const o = actx.createOscillator(), lfo = actx.createOscillator(), lg = actx.createGain(), g = actx.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.55, t + 1.8);
+    lfo.frequency.value = 14 + Math.random() * 10; lg.gain.value = f * 0.07;
+    lfo.connect(lg).connect(o.frequency); g.gain.value = 0.12;
+    o.connect(g).connect(shaper); o.start(t); lfo.start(t); o.stop(t + 1.85); lfo.stop(t + 1.85);
+  }
+  const buf = actx.createBuffer(1, actx.sampleRate * 1.8, actx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = actx.createBufferSource(), bp = actx.createBiquadFilter(), ng = actx.createGain();
+  src.buffer = buf; bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.7; ng.gain.value = 0.35;
+  src.connect(bp).connect(ng).connect(shaper); src.start(t);
+}
 function noiseBurst(dur, vol, freq) {
   if (!actx || !soundOn) return;
   const t = actx.currentTime, buf = actx.createBuffer(1, actx.sampleRate * dur, actx.sampleRate), d = buf.getChannelData(0);
@@ -566,6 +591,9 @@ const EYE = 1.65, keys = {};
 const me = { x: 0, z: 0, yaw: 0, pitch: 0 };
 let time, best = 0, over, started = false, stamina = 1, bob = 0;
 const MAX_AMMO = 6, STUN_TIME = 3, RELOAD_TIME = 1.4;
+let scareT = 0, shake = 0;
+const scareFace = new THREE.Vector3();
+const scareEl = document.getElementById('scare');
 let ammo = MAX_AMMO, reloading = 0, recoil = 0, flashT = 0, stun = 0, hitFlash = 0, hits = 0;
 const ammoEl = document.getElementById('ammo'), stunEl = document.getElementById('stun');
 const ray = new THREE.Raycaster(), center = new THREE.Vector2(0, 0);
@@ -582,6 +610,8 @@ function reset() {
   time = 0; over = false; stamina = 1;
   overEl.hidden = true;
   ammo = MAX_AMMO; reloading = 0; stun = 0; hitFlash = 0; hits = 0;
+  scareT = 0; shake = 0; scareEl.style.opacity = 0; beast.head.rotation.x = -0.75;
+  camera.fov = 55; camera.updateProjectionMatrix();
 }
 function pushOut(p, r) {
   for (const t of trees) {
@@ -670,14 +700,34 @@ addEventListener('pointerup', drop); addEventListener('pointercancel', drop);
 function update(dt) {
   if (!started) { me.yaw += dt * 0.08; return; } // slow look-around behind the start card
   if (over) {
-    // the monster grabs you: you're forced to stare into its face
-    const hx = monster.position.x - me.x, hz = monster.position.z - me.z;
-    const yaw = Math.atan2(-hx, -hz);
-    let dy = yaw - me.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-    me.yaw += dy * Math.min(1, dt * 10);
-    me.pitch += (0.45 - me.pitch) * Math.min(1, dt * 8);
-    beast.jaw.rotation.x = 0.75;
-    for (const a of beast.arms) a.sh.rotation.x = -1.6;
+    // JUMPSCARE: the face lunges right into the camera, screaming
+    scareT += dt;
+    const fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw);
+    // place the body so the snout lands right in front of the eyes, lunging closer
+    const dist = Math.max(1.0, 2.4 - scareT * 7);
+    beast.head.rotation.x = -1.15; // tilt the open maw straight at the camera
+    monster.rotation.set(0, Math.atan2(-fx, -fz), 0);
+    monster.position.set(me.x + fx * 3, 0, me.z + fz * 3);
+    monster.updateMatrixWorld(true);
+    const face = beast.head.localToWorld(scareFace.set(0, -0.06, 0.42));
+    monster.position.x += me.x + fx * dist - face.x;
+    monster.position.y += 1.6 + Math.sin(scareT * 50) * 0.02 - face.y;
+    monster.position.z += me.z + fz * dist - face.z;
+    me.pitch += (0 - me.pitch) * Math.min(1, dt * 20);
+    beast.jaw.rotation.x = 0.85 + Math.sin(scareT * 45) * 0.12;
+    beast.head.rotation.z = Math.sin(scareT * 60) * 0.18;
+    for (const a of beast.arms) a.sh.rotation.x = -2.3 + Math.sin(scareT * 30 + a.s) * 0.2;
+    beast.eyeM.emissiveIntensity = 6; beast.eyeGlow.intensity = 5;
+    for (const m of beast.skin) m.emissive.setRGB(0.08 + Math.random() * 0.1, 0, 0);
+    camera.fov += (38 - camera.fov) * Math.min(1, dt * 12); camera.updateProjectionMatrix();
+    shake = Math.max(0, 1 - scareT / 1.8) * 0.07;
+    // white flash, then strobing red
+    scareEl.style.background = scareT < 0.07 ? '#fff' : '#b00000';
+    scareEl.style.opacity = scareT < 0.07 ? 1 : (scareT < 1.2 && Math.sin(scareT * 70) > 0.7 ? 0.25 : 0);
+    if (scareT > 1.9 && overEl.hidden) {
+      overEl.hidden = false; shake = 0; scareEl.style.opacity = 0;
+      try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+    }
     return;
   }
   time += dt;
@@ -741,8 +791,7 @@ function update(dt) {
   if (d < 1.5 && stun <= 0) {
     over = true; best = Math.max(best, time);
     resultEl.textContent = 'Ты продержался ' + time.toFixed(1) + ' с, попаданий: ' + hits;
-    overEl.hidden = false; vig.style.opacity = 1; roar();
-    try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+    vig.style.opacity = 1; scareT = 0; scream();
   }
   timeEl.textContent = time.toFixed(1) + ' с';
   bestEl.textContent = best ? 'Рекорд ' + best.toFixed(1) + ' с' : '';
@@ -777,7 +826,7 @@ function loop(now) {
   update(dt);
   animateWorld(now / 1000);
   camera.position.set(me.x, EYE + Math.sin(bob) * 0.05, me.z);
-  camera.rotation.set(me.pitch, me.yaw, Math.sin(bob * 0.5) * 0.012);
+  camera.rotation.set(me.pitch + (Math.random() - 0.5) * shake, me.yaw + (Math.random() - 0.5) * shake, Math.sin(bob * 0.5) * 0.012 + (Math.random() - 0.5) * shake);
   recoil = Math.max(0, recoil - dt * 8);
   flashT = Math.max(0, flashT - dt);
   muzzle.visible = flashT > 0; muzzleLight.intensity = flashT > 0 ? 4 : 0;
