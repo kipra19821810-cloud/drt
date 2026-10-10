@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monster Chase FPS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;600&display=swap">
+<style>
+  /* Layout: full-screen first-person scene, HUD pinned top, hint pinned bottom. Single dark night look by choice. */
+  :root {
+    --bg: #0c130f; --fg: #e8efe6; --muted: #a9bcad; --panel: rgba(12,19,15,0.72);
+    --monster: #e8483a; --blood: rgba(150,0,0,0.85); --player: #5cc8f0;
+    --display: "Russo One", "Arial Black", system-ui, sans-serif;
+    --body: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; }
+  #game { position: fixed; inset: 0; touch-action: none; }
+  #game canvas { display: block; }
+  .hud { position: fixed; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 0; display: flex; justify-content: space-between; gap: 12px; pointer-events: none; font-family: var(--display); font-size: clamp(1rem, 4vw, 1.4rem); font-variant-numeric: tabular-nums; text-shadow: 0 2px 6px #000; }
+  .vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 45%, var(--blood) 100%); opacity: 0; }
+  .hud button { pointer-events: auto; font: 600 0.8rem var(--body); padding: 6px 10px; background: var(--panel); color: var(--fg); }
+  .hint { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); margin: 0; text-align: center; color: var(--muted); font-size: 0.9rem; line-height: 1.5; pointer-events: none; }
+  kbd { font-family: var(--body); font-weight: 600; color: var(--fg); background: var(--panel); padding: 1px 6px; border-radius: 4px; }
+  .stam { width: min(160px, 30vw); height: 8px; background: var(--panel); border-radius: 4px; overflow: hidden; align-self: center; }
+  .stam i { display: block; height: 100%; width: 100%; background: var(--player); }
+  .hud .right { display: flex; gap: 12px; align-items: center; }
+  .over { position: fixed; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: rgba(5,8,6,0.6); }
+  .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
+  .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
+  .card p { margin: 0; }
+  button { font: 600 1rem var(--body); color: var(--bg); background: var(--player); border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div id="game"></div>
+<div class="vignette" id="vig"></div>
+<div class="hud"><span id="time">0.0 с</span><span class="right"><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><button id="snd" type="button">Звук: вкл</button></span></div>
+<p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, <kbd>Shift</kbd> — бег (тратит выносливость), <kbd>Esc</kbd> — отпустить мышь. На телефоне: левая половина — идти, правая — смотреть.</p>
+<div class="over" id="start">
+  <div class="card">
+    <h2>Ночной лес</h2>
+    <p>Где-то в темноте бродит монстр. У тебя только фонарик. Слушай сердце: чем ближе он, тем чаще оно стучит.</p>
+    <button id="go" type="button">Начать</button>
+  </div>
+</div>
+<div class="over" id="over" hidden>
+  <div class="card">
+    <h2>Поймал!</h2>
+    <p id="result"></p>
+    <button id="again" type="button">Ещё раз</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const ARENA = 40;
+const root = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+root.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06090a);
+scene.fog = new THREE.FogExp2(0x06090a, 0.045);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+
+scene.add(new THREE.HemisphereLight(0x5a6f99, 0x0a120c, 0.28));
+const moon = new THREE.DirectionalLight(0x8fa4d0, 0.3);
+moon.position.set(15, 30, 10);
+moon.castShadow = true;
+moon.shadow.mapSize.set(2048, 2048);
+Object.assign(moon.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, far: 100 });
+scene.add(moon);
+
+const mat = (color, roughness = 0.8, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness, metalness: 0, ...extra });
+function mesh(geo, m, x = 0, y = 0, z = 0, parent) {
+  const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true;
+  if (parent) parent.add(o); return o;
+}
+function pivot(parent, x = 0, y = 0, z = 0) { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; }
+
+// ground, fence, trees
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2 + 40, ARENA * 2 + 40), mat(0x172a1c, 1));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const postGeo = new THREE.BoxGeometry(0.25, 1.3, 0.25), postMat = mat(0x4a3a2a);
+for (let i = -ARENA; i <= ARENA; i += 4)
+  for (const [x, z] of [[i, -ARENA], [i, ARENA], [-ARENA, i], [ARENA, i]]) mesh(postGeo, postMat, x, 0.65, z, scene);
+
+const trees = [];
+const trunkMat = mat(0x3b2a20, 1);
+for (let i = 0; i < 34; i++) {
+  const x = (Math.random() * 2 - 1) * (ARENA - 4), z = (Math.random() * 2 - 1) * (ARENA - 4);
+  if (Math.hypot(x, z) < 8 || Math.hypot(x, z + 25) < 5) continue;
+  const g = pivot(scene, x, 0, z), h = 1 + Math.random() * 0.5;
+  const leafMat = mat(0x173521, 0.9);
+  mesh(new THREE.CylinderGeometry(0.28, 0.45, 3.6, 8), trunkMat, 0, 1.8, 0, g);
+  mesh(new THREE.ConeGeometry(2, 3.5, 8), leafMat, 0, 4.9, 0, g);
+  mesh(new THREE.ConeGeometry(1.5, 2.8, 8), leafMat, 0, 6.5, 0, g);
+  g.scale.setScalar(h);
+  trees.push({ x, z, r: 0.6 * h + 0.3, leafMat });
+}
+
+// ---------- monster ----------
+function makeMonster() {
+  const g = new THREE.Group();
+  const hide = mat(0x0b0807, 0.9), flesh = mat(0x3a1414, 0.7), bone = mat(0xcfc3a3, 0.5);
+  const maw = mat(0x400000, 0.6, { emissive: 0x6a0000, emissiveIntensity: 0.8 });
+  const eyeM = mat(0xff2a00, 0.3, { emissive: 0xff1a00, emissiveIntensity: 3 });
+  const legs = [], arms = [];
+  for (const s of [-1, 1]) {
+    const hip = pivot(g, s * 0.38, 1.7, 0);
+    mesh(new THREE.CylinderGeometry(0.17, 0.11, 0.95, 10), hide, 0, -0.47, 0, hip);
+    const knee = pivot(hip, 0, -0.95, 0);
+    mesh(new THREE.CylinderGeometry(0.1, 0.06, 0.85, 10), hide, 0, -0.42, 0, knee);
+    for (const c of [-1, 0, 1]) { const cl = mesh(new THREE.ConeGeometry(0.035, 0.22, 6), bone, c * 0.07, -0.86, 0.12, knee); cl.rotation.x = Math.PI / 2; }
+    legs.push({ hip, knee, s });
+  }
+  const spine = pivot(g, 0, 1.7, 0); spine.rotation.x = 0.55; // hunched forward
+  const torso = mesh(new THREE.CylinderGeometry(0.55, 0.3, 1.5, 14), hide, 0, 0.75, 0, spine); torso.scale.z = 0.75;
+  for (let i = 0; i < 7; i++) { // spikes on the back
+    const sp = mesh(new THREE.ConeGeometry(0.07, 0.45 - i * 0.03, 6), bone, 0, 0.2 + i * 0.2, -0.4 + i * 0.01, spine);
+    sp.rotation.x = -1.1;
+  }
+  const head = pivot(spine, 0, 1.6, 0.1); head.rotation.x = -0.75;
+  const skull = mesh(new THREE.SphereGeometry(0.38, 18, 14), flesh, 0, 0.1, 0.1, head); skull.scale.set(0.85, 0.85, 1.25);
+  mesh(new THREE.SphereGeometry(0.26, 14, 10), maw, 0, -0.02, 0.38, head).scale.set(1, 0.7, 0.8);
+  const jaw = pivot(head, 0, -0.08, 0.05);
+  const jawM = mesh(new THREE.SphereGeometry(0.3, 14, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), flesh, 0, 0, 0.3, jaw); jawM.scale.set(0.85, 0.6, 1.3);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 8 - 0.5) * 2.2, x = Math.sin(a) * 0.24, z = 0.38 + Math.cos(a) * 0.24;
+    const t = mesh(new THREE.ConeGeometry(0.035, 0.17, 5), bone, x, -0.02, z, head); t.rotation.x = Math.PI;
+    mesh(new THREE.ConeGeometry(0.03, 0.14, 5), bone, x * 0.9, 0.05, z - 0.02, jaw);
+  }
+  for (const [x, y, r] of [[-0.16, 0.24, 0.07], [0.16, 0.24, 0.07], [-0.27, 0.32, 0.04], [0.27, 0.32, 0.04]]) mesh(new THREE.SphereGeometry(r, 10, 8), eyeM, x, y, 0.5, head);
+  for (const s of [-1, 1]) { const h = mesh(new THREE.ConeGeometry(0.08, 0.7, 8), bone, s * 0.25, 0.45, -0.05, head); h.rotation.set(-0.8, 0, -s * 0.5); }
+  const eyeGlow = new THREE.PointLight(0xff2000, 2.2, 9, 2); eyeGlow.position.set(0, 0.3, 0.8); head.add(eyeGlow);
+  for (const s of [-1, 1]) {
+    const sh = pivot(spine, s * 0.58, 1.3, 0.05); sh.rotation.z = s * 0.15;
+    mesh(new THREE.CylinderGeometry(0.1, 0.075, 1.15, 10), hide, 0, -0.57, 0, sh);
+    const el = pivot(sh, 0, -1.15, 0);
+    mesh(new THREE.CylinderGeometry(0.075, 0.05, 1.1, 10), hide, 0, -0.55, 0, el);
+    for (const c of [-1, 0, 1]) { const cl = mesh(new THREE.ConeGeometry(0.03, 0.42, 6), bone, c * 0.06, -1.25, 0.04, el); cl.rotation.x = Math.PI - 0.3; }
+    arms.push({ sh, el, s });
+  }
+  return { g, legs, arms, head, jaw };
+}
+
+// ---------- heartbeat audio ----------
+let actx = null, soundOn = true, nextBeat = 0;
+const sndBtn = document.getElementById('snd');
+function initAudio() { if (!actx) try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+sndBtn.addEventListener('click', e => { e.stopPropagation(); initAudio(); soundOn = !soundOn; sndBtn.textContent = 'Звук: ' + (soundOn ? 'вкл' : 'выкл'); });
+function thump(t, vol) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(35, t + 0.15);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.22);
+}
+function roar() {
+  if (!actx || !soundOn) return;
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = 'sawtooth'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(45, t + 1.2);
+  g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 1.3);
+}
+
+
+const beast = makeMonster(), monster = beast.g; scene.add(monster);
+
+// first-person camera with a flashlight in hand
+camera.rotation.order = 'YXZ';
+scene.add(camera);
+const flash = new THREE.SpotLight(0xfff0d0, 3.2, 28, 0.42, 0.55, 1.5);
+flash.position.set(0.25, -0.25, 0); flash.castShadow = true; flash.shadow.mapSize.set(1024, 1024);
+const flashTarget = new THREE.Object3D(); flashTarget.position.set(0, -0.3, -8);
+camera.add(flash, flashTarget); flash.target = flashTarget;
+const torch = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.32, 12), mat(0x2a2a2a, 0.4));
+torch.rotation.x = Math.PI / 2; torch.position.set(0.28, -0.28, -0.45); camera.add(torch);
+const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), mat(0xd9a07f, 0.6));
+hand.scale.set(0.9, 0.8, 1.4); hand.position.set(0.28, -0.32, -0.38); camera.add(hand);
+
+// ---------- state & input ----------
+const EYE = 1.65, keys = {};
+const me = { x: 0, z: 0, yaw: 0, pitch: 0 };
+let time, best = 0, over, started = false, stamina = 1, bob = 0;
+const timeEl = document.getElementById('time'), bestEl = document.getElementById('best'), stamEl = document.getElementById('stam');
+const overEl = document.getElementById('over'), startEl = document.getElementById('start');
+const resultEl = document.getElementById('result'), vig = document.getElementById('vig');
+
+function reset() {
+  me.x = 0; me.z = 0; me.yaw = 0; me.pitch = 0;
+  // monster appears somewhere far away, not in front of you
+  const a = (Math.random() - 0.5) * Math.PI;
+  monster.position.set(Math.sin(a) * 26, 0, Math.cos(a) * 26);
+  time = 0; over = false; stamina = 1;
+  overEl.hidden = true;
+}
+function pushOut(p, r) {
+  for (const t of trees) {
+    const dx = p.x - t.x, dz = p.z - t.z, d = Math.hypot(dx, dz), min = t.r + r;
+    if (d < min && d > 0) { p.x = t.x + dx / d * min; p.z = t.z + dz / d * min; }
+  }
+  const lim = ARENA - r;
+  p.x = Math.max(-lim, Math.min(lim, p.x));
+  p.z = Math.max(-lim, Math.min(lim, p.z));
+}
+function lockMouse() { try { const r = renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+function begin() { initAudio(); startEl.hidden = true; started = true; reset(); lockMouse(); }
+document.getElementById('go').addEventListener('click', begin);
+document.getElementById('again').addEventListener('click', () => { reset(); lockMouse(); });
+
+addEventListener('keydown', e => {
+  initAudio();
+  const k = e.key.toLowerCase();
+  if (k.startsWith('arrow') || k === ' ') e.preventDefault();
+  keys[k] = true;
+  if (over && (k === 'r' || k === 'к' || k === 'enter')) { reset(); lockMouse(); }
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+function look(dx, dy, k) {
+  me.yaw -= dx * k; me.pitch -= dy * k;
+  me.pitch = Math.max(-1.3, Math.min(1.3, me.pitch));
+}
+document.addEventListener('mousemove', e => {
+  // browsers sometimes report one huge jump right after the lock; skip it
+  if (Math.abs(e.movementX) > 150 || Math.abs(e.movementY) > 150) return;
+  if (document.pointerLockElement === renderer.domElement && !over) look(e.movementX, e.movementY, 0.0025);
+});
+
+// touch / drag: left half moves, right half looks; mouse drag looks when not locked
+const ptrs = new Map();
+let stick = null;
+root.addEventListener('pointerdown', e => {
+  initAudio();
+  if (started && !over && e.pointerType === 'mouse') { lockMouse(); }
+  const isMove = e.pointerType !== 'mouse' && e.clientX < innerWidth / 2;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, move: isMove });
+});
+addEventListener('pointermove', e => {
+  const p = ptrs.get(e.pointerId); if (!p) return;
+  if (!p.move && document.pointerLockElement !== renderer.domElement && !over) look(e.clientX - p.x, e.clientY - p.y, 0.005);
+  p.x = e.clientX; p.y = e.clientY;
+});
+const drop = e => ptrs.delete(e.pointerId);
+addEventListener('pointerup', drop); addEventListener('pointercancel', drop);
+
+function update(dt) {
+  if (!started) { me.yaw += dt * 0.08; return; } // slow look-around behind the start card
+  if (over) {
+    // the monster grabs you: you're forced to stare into its face
+    const hx = monster.position.x - me.x, hz = monster.position.z - me.z;
+    const yaw = Math.atan2(-hx, -hz);
+    let dy = yaw - me.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    me.yaw += dy * Math.min(1, dt * 10);
+    me.pitch += (0.45 - me.pitch) * Math.min(1, dt * 8);
+    beast.jaw.rotation.x = 0.75;
+    for (const a of beast.arms) a.sh.rotation.x = -1.6;
+    return;
+  }
+  time += dt;
+  let f = 0, s = 0;
+  if (keys['w'] || keys['ц'] || keys['arrowup']) f++;
+  if (keys['s'] || keys['ы'] || keys['arrowdown']) f--;
+  if (keys['d'] || keys['в']) s++;
+  if (keys['a'] || keys['ф']) s--;
+  if (keys['arrowleft']) me.yaw += dt * 2.4;
+  if (keys['arrowright']) me.yaw -= dt * 2.4;
+  for (const p of ptrs.values()) if (p.move) {
+    const ox = p.x - p.sx, oy = p.y - p.sy;
+    if (Math.hypot(ox, oy) > 12) { s = ox / 60; f = -oy / 60; }
+  }
+  const len = Math.hypot(f, s);
+  if (len > 1) { f /= len; s /= len; }
+  const moving = len > 0.05;
+  const sprint = moving && (keys['shift'] || len > 1.6) && stamina > 0.02;
+  stamina = Math.max(0, Math.min(1, stamina + (sprint ? -0.28 : 0.16) * dt));
+  const speed = sprint ? 8.5 : 5;
+  const sin = Math.sin(me.yaw), cos = Math.cos(me.yaw);
+  me.x += (-sin * f + cos * s) * speed * dt;
+  me.z += (-cos * f - sin * s) * speed * dt;
+  pushOut(me, 0.35);
+  bob = moving ? bob + dt * (sprint ? 14 : 9) : bob * 0.9;
+
+  const mSpeed = 3.6 + time * 0.12;
+  const mx = me.x - monster.position.x, mz = me.z - monster.position.z, d = Math.hypot(mx, mz);
+  if (d) { monster.position.x += mx / d * mSpeed * dt; monster.position.z += mz / d * mSpeed * dt; }
+  pushOut(monster.position, 0.9);
+  monster.rotation.y = Math.atan2(mx, mz);
+  mPhase += dt * mSpeed * 1.1;
+  animateLimbs(beast, mPhase, 0.55, 0.35, -1.0, -0.5);
+  for (const a of beast.arms) a.sh.rotation.x = -1.2 + Math.sin(mPhase * 2 + a.s) * 0.35;
+  beast.jaw.rotation.x = 0.25 + Math.abs(Math.sin(time * 3)) * 0.35;
+  beast.head.rotation.z = Math.sin(time * 1.7) * 0.15;
+  monster.position.y = Math.abs(Math.sin(mPhase)) * 0.12;
+
+  const fear = Math.max(0, Math.min(1, 1 - (d - 2) / 16));
+  vig.style.opacity = (fear * 0.9).toFixed(2);
+  if (actx && soundOn && actx.currentTime >= nextBeat) {
+    const t = actx.currentTime, gap = 1.1 - fear * 0.75, vol = 0.15 + fear * 0.6;
+    thump(t, vol); thump(t + 0.18, vol * 0.7); nextBeat = t + gap;
+  }
+  if (d < 1.5) {
+    over = true; best = Math.max(best, time);
+    resultEl.textContent = 'Ты продержался ' + time.toFixed(1) + ' с';
+    overEl.hidden = false; vig.style.opacity = 1; roar();
+    try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  }
+  timeEl.textContent = time.toFixed(1) + ' с';
+  bestEl.textContent = best ? 'Рекорд ' + best.toFixed(1) + ' с' : '';
+  stamEl.style.width = (stamina * 100).toFixed(0) + '%';
+}
+
+function animateLimbs(rig, phase, amp, kneeBend, armBase, elbowBase) {
+  for (const l of rig.legs) {
+    const p = phase + (l.s > 0 ? Math.PI : 0);
+    l.hip.rotation.x = Math.sin(p) * amp;
+    l.knee.rotation.x = kneeBend + Math.max(0, Math.cos(p)) * amp * 1.4;
+  }
+  for (const a of rig.arms) {
+    a.sh.rotation.x = armBase + Math.sin(phase + (a.s > 0 ? 0 : Math.PI)) * amp * 0.9;
+    a.el.rotation.x = elbowBase;
+  }
+}
+let mPhase = 0;
+
+function resize() {
+  const w = root.clientWidth, h = root.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min((now - lastT) / 1000, 0.05); lastT = now;
+  update(dt);
+  camera.position.set(me.x, EYE + Math.sin(bob) * 0.05, me.z);
+  camera.rotation.set(me.pitch, me.yaw, Math.sin(bob * 0.5) * 0.012);
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+reset(); resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
