@@ -56,7 +56,7 @@
   <div class="card">
     <h2>Ночной лес</h2>
     <p>Где-то в темноте бродит монстр. У тебя фонарик и пистолет на 6 патронов: попадание остановит монстра на 3 секунды. Слушай сердце: чем ближе он, тем чаще оно стучит.</p>
-    <p>С тобой верный пёс. Он лает, когда монстр рядом, и один раз спасёт тебя.</p>
+    <p>С тобой храбрая чихуахуа. Она тявкает, когда монстр рядом, и один раз спасёт тебя.</p>
     <p><strong>Осторожно:</strong> если он поймает, будет громкий скример.</p>
     <button id="go" type="button">Начать</button>
   </div>
@@ -604,23 +604,23 @@ monster.rotation.order = 'YXZ';
 
 // ---------- dog companion ----------
 const furTex = canvasTex(256, (x, s) => {
-  x.fillStyle = '#9a6430'; x.fillRect(0, 0, s, s);
+  x.fillStyle = '#c9975a'; x.fillRect(0, 0, s, s);
   for (let i = 0; i < 2600; i++) { // short fur strands
     const px = Math.random() * s, py = Math.random() * s, a = 1.4 + rnd(-0.3, 0.3), l = rnd(3, 8);
-    x.strokeStyle = ['rgba(60,35,15,0.5)', 'rgba(190,130,70,0.45)', 'rgba(120,75,35,0.6)'][i % 3];
+    x.strokeStyle = ['rgba(140,95,50,0.5)', 'rgba(235,195,140,0.45)', 'rgba(175,125,70,0.6)'][i % 3];
     x.lineWidth = rnd(0.6, 1.4); x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke();
   }
 }, 2);
 const saddleTex = canvasTex(256, (x, s) => {
-  x.fillStyle = '#2a1c12'; x.fillRect(0, 0, s, s);
+  x.fillStyle = '#9a6a38'; x.fillRect(0, 0, s, s);
   for (let i = 0; i < 2200; i++) {
     const px = Math.random() * s, py = Math.random() * s, l = rnd(3, 7);
-    x.strokeStyle = i % 2 ? 'rgba(10,6,4,0.6)' : 'rgba(90,60,35,0.4)'; x.lineWidth = rnd(0.6, 1.3);
+    x.strokeStyle = i % 2 ? 'rgba(80,50,25,0.5)' : 'rgba(190,140,85,0.4)'; x.lineWidth = rnd(0.6, 1.3);
     x.beginPath(); x.moveTo(px, py); x.lineTo(px + rnd(-1, 1), py + l); x.stroke();
   }
 }, 2);
 const creamTex = canvasTex(256, (x, s) => {
-  x.fillStyle = '#e2c9a0'; x.fillRect(0, 0, s, s);
+  x.fillStyle = '#f1e2c4'; x.fillRect(0, 0, s, s);
   for (let i = 0; i < 2000; i++) {
     const px = Math.random() * s, py = Math.random() * s, l = rnd(2, 6);
     x.strokeStyle = i % 2 ? 'rgba(170,130,85,0.4)' : 'rgba(250,240,220,0.5)'; x.lineWidth = rnd(0.5, 1.2);
@@ -629,65 +629,67 @@ const creamTex = canvasTex(256, (x, s) => {
 }, 2);
 
 function makeDog() {
+  // chihuahua: tiny body, apple-dome head, huge upright ears, bulging eyes, thin legs
   const g = new THREE.Group();
-  const fur = texMat(furTex, 0.9, { bumpScale: 0.03 }), saddle = texMat(saddleTex, 0.9, { bumpScale: 0.03 });
-  const cream = texMat(creamTex, 0.9, { bumpScale: 0.02 });
-  const black = mat(0x0c0a09, 0.25), pink = mat(0xc4606a, 0.4), eye = mat(0x2a1608, 0.15);
-  const glint = new THREE.MeshBasicMaterial({ color: 0xffffff }), collarM = mat(0xb02020, 0.5), gold = mat(0xd8b040, 0.3, { metalness: 0.7 });
+  const fur = texMat(furTex, 0.9, { bumpScale: 0.015 }), dark = texMat(saddleTex, 0.9, { bumpScale: 0.015 });
+  const cream = texMat(creamTex, 0.9, { bumpScale: 0.01 });
+  const black = mat(0x0c0a09, 0.2), pink = mat(0xd77a84, 0.45), eye = mat(0x120804, 0.08);
+  const glint = new THREE.MeshBasicMaterial({ color: 0xffffff }), collarM = mat(0xe0459a, 0.45), gold = mat(0xd8b040, 0.3, { metalness: 0.7 });
   const S = (r, w = 14, h = 10) => new THREE.SphereGeometry(r, w, h);
   const Cy = (a, b, l, n = 10) => new THREE.CylinderGeometry(a, b, l, n);
 
-  const body = pivot(g, 0, 0.55, 0);
-  mesh(S(0.2, 18, 14), fur, 0, 0, -0.05, body).scale.set(0.95, 0.9, 1.9);
-  mesh(S(0.19, 16, 12), saddle, 0, 0.07, -0.08, body).scale.set(0.95, 0.6, 1.6); // dark back
-  mesh(S(0.2, 16, 12), fur, 0, 0.02, 0.24, body).scale.set(1, 1.08, 1);        // chest
-  mesh(S(0.13, 12, 10), cream, 0, -0.06, 0.36, body).scale.set(1, 1.2, 0.6);    // chest blaze
-  mesh(S(0.15, 12, 10), cream, 0, -0.1, -0.02, body).scale.set(0.9, 0.5, 1.6);  // belly
-  for (const s of [-1, 1]) mesh(S(0.1, 10, 8), fur, s * 0.1, 0.0, -0.33, body).scale.set(0.7, 1.15, 1.1); // haunches
+  const body = pivot(g, 0, 0.21, 0);
+  mesh(S(0.08, 16, 12), fur, 0, 0, -0.01, body).scale.set(0.95, 0.9, 1.65);
+  mesh(S(0.075, 14, 10), dark, 0, 0.03, -0.02, body).scale.set(0.9, 0.55, 1.45);   // darker back
+  mesh(S(0.075, 14, 10), fur, 0, 0.01, 0.08, body).scale.set(1, 1.05, 1);          // chest
+  mesh(S(0.05, 10, 8), cream, 0, -0.025, 0.13, body).scale.set(1, 1.2, 0.6);        // white chest
+  mesh(S(0.06, 10, 8), cream, 0, -0.045, 0, body).scale.set(0.85, 0.5, 1.5);        // belly
+  for (const s of [-1, 1]) mesh(S(0.04, 10, 8), fur, s * 0.045, 0.0, -0.11, body).scale.set(0.7, 1.1, 1.1);
 
-  const neck = pivot(body, 0, 0.1, 0.33); neck.rotation.x = -0.75;
-  mesh(Cy(0.085, 0.12, 0.26, 12), fur, 0, 0.12, 0, neck);
-  mesh(new THREE.TorusGeometry(0.098, 0.016, 8, 20), collarM, 0, 0.08, 0, neck).rotation.x = Math.PI / 2;
-  const tag = mesh(Cy(0.022, 0.022, 0.006, 12), gold, 0, 0.04, 0.115, neck); tag.rotation.x = Math.PI / 2;
+  const neck = pivot(body, 0, 0.04, 0.12); neck.rotation.x = -0.5;
+  mesh(Cy(0.035, 0.05, 0.08, 12), fur, 0, 0.04, 0, neck);
+  mesh(new THREE.TorusGeometry(0.042, 0.008, 8, 20), collarM, 0, 0.03, 0, neck).rotation.x = Math.PI / 2;
+  const tag = mesh(Cy(0.012, 0.012, 0.004, 12), gold, 0, 0.012, 0.05, neck); tag.rotation.x = Math.PI / 2;
 
-  const head = pivot(neck, 0, 0.27, 0.02); head.rotation.x = 0.85;
-  mesh(S(0.115, 16, 12), fur, 0, 0, 0, head).scale.set(1, 0.92, 1.05);
-  mesh(S(0.1, 12, 10), saddle, 0, 0.04, -0.02, head).scale.set(0.95, 0.6, 1);
-  mesh(S(0.07, 14, 10), cream, 0, -0.035, 0.12, head).scale.set(0.85, 0.75, 1.5); // muzzle
-  mesh(S(0.028, 10, 8), black, 0, -0.005, 0.22, head).scale.set(1.2, 0.85, 0.9); // nose
-  for (const s of [-1, 1]) mesh(S(0.007, 6, 4), mat(0x000000, 1), s * 0.01, -0.01, 0.245, head);  // nostrils
-  const jaw = pivot(head, 0, -0.07, 0.06);
-  mesh(S(0.05, 12, 8), cream, 0, 0, 0.08, jaw).scale.set(0.8, 0.45, 1.5);
-  const tongue = mesh(S(0.03, 10, 6), pink, 0, -0.01, 0.13, jaw); tongue.scale.set(0.9, 0.3, 1.6);
+  const head = pivot(neck, 0, 0.12, 0.01); head.rotation.x = 0.5;
+  mesh(S(0.072, 20, 16), fur, 0, 0.01, 0, head).scale.set(1.05, 1, 1);               // apple dome
+  mesh(S(0.05, 12, 10), dark, 0, 0.045, -0.01, head).scale.set(1, 0.5, 1);
+  mesh(S(0.03, 12, 10), cream, 0, -0.025, 0.065, head).scale.set(0.95, 0.8, 1.15);   // short muzzle
+  mesh(S(0.018, 10, 8), cream, 0, 0.02, 0.07, head).scale.set(0.7, 1.4, 0.6);         // blaze between eyes
+  mesh(S(0.011, 10, 8), black, 0, -0.015, 0.098, head).scale.set(1.3, 0.85, 0.9);     // nose
+  const jaw = pivot(head, 0, -0.045, 0.03);
+  mesh(S(0.022, 10, 8), cream, 0, 0, 0.035, jaw).scale.set(0.8, 0.45, 1.4);
+  const tongue = mesh(S(0.012, 8, 6), pink, 0, -0.004, 0.055, jaw); tongue.scale.set(0.9, 0.3, 1.6);
   for (const s of [-1, 1]) {
-    mesh(S(0.022, 10, 8), eye, s * 0.052, 0.035, 0.085, head);
-    mesh(S(0.006, 6, 4), glint, s * 0.055, 0.045, 0.104, head);
-    mesh(S(0.018, 8, 6), cream, s * 0.05, 0.065, 0.08, head).scale.set(1.3, 0.5, 0.8); // brow spots
-    const ear = pivot(head, s * 0.075, 0.07, -0.02); ear.rotation.set(-0.2, 0, -s * 0.35);
-    const e = mesh(new THREE.ConeGeometry(0.05, 0.13, 3), fur, 0, 0.06, 0, ear); e.scale.set(1, 1, 0.35);
-    const ein = mesh(new THREE.ConeGeometry(0.032, 0.09, 3), pink, 0, 0.05, 0.012, ear); ein.scale.set(1, 1, 0.2);
+    mesh(S(0.02, 12, 10), eye, s * 0.038, 0.012, 0.055, head);                          // big bulging eyes
+    mesh(S(0.005, 6, 4), glint, s * 0.042, 0.02, 0.073, head);
+    mesh(S(0.012, 8, 6), dark, s * 0.04, 0.032, 0.05, head).scale.set(1.6, 0.4, 0.8);   // brows
+    const ear = pivot(head, s * 0.04, 0.055, -0.01); ear.rotation.set(-0.15, 0, -s * 0.55);
+    const e = mesh(new THREE.ConeGeometry(0.038, 0.11, 4), fur, 0, 0.05, 0, ear); e.scale.set(1, 1, 0.3);
+    const ein = mesh(new THREE.ConeGeometry(0.028, 0.085, 4), pink, 0, 0.045, 0.008, ear); ein.scale.set(1, 1, 0.15);
+    for (let k = 0; k < 4; k++) mesh(Cy(0.001, 0.002, 0.03, 3), cream, rnd(-0.01, 0.01), 0.02 + k * 0.012, 0.012, ear).rotation.z = rnd(-0.6, 0.6); // ear fluff
     g.userData['ear' + s] = ear;
   }
 
   const legs = [];
-  for (const [fx, fz, front] of [[-1, 0.28, true], [1, 0.28, true], [-1, -0.32, false], [1, -0.32, false]]) {
-    const hip = pivot(g, fx * 0.1, 0.5, fz);
-    mesh(Cy(0.048, 0.036, 0.25), front ? fur : saddle, 0, -0.12, front ? 0 : -0.02, hip);
-    const knee = pivot(hip, 0, -0.25, 0);
-    mesh(S(0.035, 8, 6), fur, 0, 0, 0, knee);
-    mesh(Cy(0.032, 0.028, 0.22), front ? cream : fur, 0, -0.11, 0, knee);
-    const paw = mesh(S(0.042, 10, 8), cream, 0, -0.23, 0.025, knee); paw.scale.set(1, 0.6, 1.35);
-    for (const t of [-1, 0, 1]) mesh(S(0.013, 6, 4), black, t * 0.02, -0.245, 0.075, knee);
+  for (const [fx, fz, front] of [[-1, 0.09, true], [1, 0.09, true], [-1, -0.11, false], [1, -0.11, false]]) {
+    const hip = pivot(g, fx * 0.04, 0.19, fz);
+    mesh(Cy(0.018, 0.012, 0.1, 8), fur, 0, -0.05, 0, hip);
+    const knee = pivot(hip, 0, -0.1, 0);
+    mesh(S(0.012, 6, 4), fur, 0, 0, 0, knee);
+    mesh(Cy(0.01, 0.009, 0.08, 8), front ? cream : fur, 0, -0.04, 0, knee);
+    const paw = mesh(S(0.016, 8, 6), cream, 0, -0.084, 0.008, knee); paw.scale.set(1, 0.6, 1.4);
+    for (const t of [-1, 0, 1]) mesh(S(0.004, 4, 3), black, t * 0.007, -0.088, 0.027, knee);
     legs.push({ hip, knee, front, side: fx });
   }
 
-  let tail = pivot(g, 0, 0.62, -0.42); tail.rotation.x = -0.9;
+  let tail = pivot(g, 0, 0.24, -0.14); tail.rotation.x = -0.4;  // thin tail curling over the back
   const tailRoot = tail;
-  for (let i = 0; i < 5; i++) {
-    mesh(Cy(0.026 - i * 0.003, 0.034 - i * 0.003, 0.09, 8), i < 4 ? fur : cream, 0, 0.045, 0, tail);
-    tail = pivot(tail, 0, 0.09, 0); tail.rotation.x = 0.18;
+  for (let i = 0; i < 6; i++) {
+    mesh(Cy(0.007 - i * 0.0008, 0.01 - i * 0.0008, 0.035, 6), fur, 0, 0.0175, 0, tail);
+    tail = pivot(tail, 0, 0.035, 0); tail.rotation.x = -0.28;
   }
-  return { g, body, head, jaw, legs, tail: tailRoot, phase: 0 };
+  return { g, body, head, jaw, legs, tail: tailRoot, phase: 0, bodyY: 0.21 };
 }
 const dog = makeDog();
 dog.g.rotation.order = 'YXZ';
@@ -696,13 +698,14 @@ dog.state = 'follow'; dog.t = 0; dog.from = new THREE.Vector3(); dog.away = new 
 
 function animateDog(dt, speed, t) {
   const amp = Math.min(1, speed / 5);
-  dog.phase += dt * (4 + speed * 2.2);
+  dog.phase += dt * (6 + speed * 4.5); // short legs, quick steps
   for (const l of dog.legs) {
     const p = dog.phase + ((l.front ? 0 : Math.PI) + (l.side > 0 ? Math.PI : 0)); // trot: diagonal pairs
     l.hip.rotation.x = Math.sin(p) * 0.6 * amp;
     l.knee.rotation.x = (l.front ? -1 : 1) * Math.max(0, Math.cos(p)) * 0.7 * amp;
   }
-  dog.body.position.y = 0.55 + Math.abs(Math.sin(dog.phase)) * 0.03 * amp;
+  dog.body.position.y = dog.bodyY + Math.abs(Math.sin(dog.phase)) * 0.012 * amp;
+  dog.body.rotation.z = (1 - amp) * Math.sin(t * 55) * 0.025; // chihuahua shiver
   dog.tail.rotation.z = Math.sin(t * (speed > 0.5 ? 10 : 14)) * 0.6;
   dog.head.rotation.y = Math.sin(t * 1.3) * 0.25 * (1 - amp);
   dog.jaw.rotation.x = 0.15 + amp * 0.15; // panting
@@ -711,10 +714,10 @@ function animateDog(dt, speed, t) {
 function bark() {
   if (!actx || !soundOn) return;
   const t = actx.currentTime;
-  for (const off of [0, 0.18]) {
+  for (const off of [0, 0.13, 0.26]) {
     const o = actx.createOscillator(), g = actx.createGain(), f = actx.createBiquadFilter();
-    o.type = 'square'; o.frequency.setValueAtTime(420, t + off); o.frequency.exponentialRampToValueAtTime(230, t + off + 0.1);
-    f.type = 'lowpass'; f.frequency.value = 1400;
+    o.type = 'square'; o.frequency.setValueAtTime(1100, t + off); o.frequency.exponentialRampToValueAtTime(700, t + off + 0.07); // yappy
+    f.type = 'lowpass'; f.frequency.value = 3200;
     g.gain.setValueAtTime(0.0001, t + off); g.gain.exponentialRampToValueAtTime(0.25, t + off + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.12);
     o.connect(f).connect(g).connect(actx.destination); o.start(t + off); o.stop(t + off + 0.13);
   }
@@ -724,7 +727,7 @@ function yelp() {
   const t = actx.currentTime;
   for (const off of [0, 0.25, 0.5]) {
     const o = actx.createOscillator(), g = actx.createGain();
-    o.type = 'triangle'; o.frequency.setValueAtTime(1300, t + off); o.frequency.exponentialRampToValueAtTime(700, t + off + 0.18);
+    o.type = 'triangle'; o.frequency.setValueAtTime(1900, t + off); o.frequency.exponentialRampToValueAtTime(1100, t + off + 0.18);
     g.gain.setValueAtTime(0.0001, t + off); g.gain.exponentialRampToValueAtTime(0.2, t + off + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.2);
     o.connect(g).connect(actx.destination); o.start(t + off); o.stop(t + off + 0.21);
   }
@@ -740,7 +743,7 @@ function dogSave() {
   monster.position.x += ax / l * 4; monster.position.z += az / l * 4; // knocked back
   pushOut(monster.position, 0.9);
   stun = 4.5; hitFlash = 1; shriek(); noiseBurst(0.3, 0.8, 900);
-  toast('Собака бросилась на монстра и укусила его!', 3);
+  toast('Чихуахуа бросилась на монстра и вцепилась ему в ногу!', 3);
 }
 
 function updateDog(dt, t) {
@@ -748,7 +751,7 @@ function updateDog(dt, t) {
   if (dog.state === 'gone') return;
   if (dog.state === 'follow') {
     const dx = me.x - g.position.x, dz = me.z - g.position.z, d = Math.hypot(dx, dz);
-    const speed = d > 2.2 ? Math.min(9, (d - 2.2) * 3 + 2) : 0;
+    const speed = d > 1.6 ? Math.min(9, (d - 1.6) * 3 + 2) : 0;
     if (speed) { g.position.x += dx / d * speed * dt; g.position.z += dz / d * speed * dt; g.rotation.y = Math.atan2(dx, dz); }
     else { // stand and watch the monster
       const mx = monster.position.x - g.position.x, mz = monster.position.z - g.position.z;
@@ -764,16 +767,16 @@ function updateDog(dt, t) {
   } else if (dog.state === 'leap' || dog.state === 'bite') {
     // latch onto the monster's arm, between it and you
     const ax = me.x - monster.position.x, az = me.z - monster.position.z, l = Math.hypot(ax, az) || 1;
-    const tx = monster.position.x + ax / l * 0.75 + (-az / l) * 0.35, tz = monster.position.z + az / l * 0.75 + (ax / l) * 0.35;
+    const tx = monster.position.x + ax / l * 0.3 + (-az / l) * 0.38, tz = monster.position.z + az / l * 0.3 + (ax / l) * 0.38;
     dog.t += dt;
     if (dog.state === 'leap') {
       const k = Math.min(1, dog.t / 0.3);
-      g.position.set(dog.from.x + (tx - dog.from.x) * k, Math.sin(k * Math.PI / 2) * 1.0, dog.from.z + (tz - dog.from.z) * k);
+      g.position.set(dog.from.x + (tx - dog.from.x) * k, Math.sin(k * Math.PI / 2) * 0.55, dog.from.z + (tz - dog.from.z) * k);
       g.rotation.set(-0.5, Math.atan2(monster.position.x - g.position.x, monster.position.z - g.position.z), 0);
       dog.jaw.rotation.x = 0.7;
       if (k >= 1) { dog.state = 'bite'; dog.t = 0; }
     } else {
-      g.position.set(tx, 1.0 + Math.sin(dog.t * 40) * 0.03, tz);
+      g.position.set(tx, 0.55 + Math.sin(dog.t * 40) * 0.02, tz); // hanging off the monster's leg
       g.rotation.set(-0.7, Math.atan2(-ax, -az), Math.sin(dog.t * 30) * 0.35); // shaking its head while biting
       dog.jaw.rotation.x = 0.05 + Math.abs(Math.sin(dog.t * 20)) * 0.1;
       for (const lg of dog.legs) lg.hip.rotation.x = Math.sin(dog.t * 25 + lg.side) * 0.5;
@@ -811,7 +814,7 @@ function reset() {
   scareT = 0; shake = 0; scareEl.style.opacity = 0; beast.head.rotation.x = -0.75;
   camera.fov = 55; camera.updateProjectionMatrix();
   dog.state = 'follow'; dog.g.visible = true; dog.barkAt = 0;
-  dog.g.position.set(1.2, 0, 1.8); dog.g.rotation.set(0, Math.PI, 0);
+  dog.g.position.set(0.8, 0, 1.3); dog.g.rotation.set(0, Math.PI, 0);
   toastEl.hidden = true; toastT = 0;
 }
 function pushOut(p, r) {
