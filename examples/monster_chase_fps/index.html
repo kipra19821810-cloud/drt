@@ -34,7 +34,7 @@
   .stunned { color: var(--player); }
   .scare { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: #fff; opacity: 0; }
   .toast { position: fixed; z-index: 2; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 56px); transform: translateX(-50%); max-width: calc(100% - 32px); background: var(--panel); padding: 8px 14px; border-radius: 8px; font-weight: 600; text-align: center; pointer-events: none; }
-  .over { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; padding-inline: 16px; background: rgba(5,8,6,0.6); }
+  .over { position: fixed; z-index: 3; inset: 0; display: grid; align-items: safe center; justify-items: center; overflow-y: auto; padding-block: 16px; padding-inline: 16px; background: rgba(5,8,6,0.6); }
   .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
   .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
   .card p { margin: 0; }
@@ -860,6 +860,7 @@ function reset() {
   const a = (Math.random() - 0.5) * Math.PI;
   monster.position.set(Math.sin(a) * 26, 0, Math.cos(a) * 26);
   time = 0; over = false; stamina = 1;
+  nav.detour = 0; nav.best = Infinity; nav.since = 0;
   overEl.hidden = true;
   ammo = MAX_AMMO; reloading = 0; stun = 0; hitFlash = 0; hits = 0;
   scareT = 0; shake = 0; scareEl.style.opacity = 0; beast.head.rotation.x = -0.75;
@@ -1013,6 +1014,7 @@ function update(dt) {
   const mSpeed = 3.6 + time * 0.12;
   const mx = me.x - monster.position.x, mz = me.z - monster.position.z, d = Math.hypot(mx, mz);
   if (stun > 0) {
+    nav.since = 0; nav.best = Infinity;
     // frozen: slumped, twitching, eyes dimmed
     stun = Math.max(0, stun - dt);
     animateLimbs(beast, 0, 0, 0.6, -0.2, -0.2);
@@ -1030,8 +1032,7 @@ function update(dt) {
     monster.position.y = 0;
     beast.eyeM.emissiveIntensity = 0.4; beast.eyeGlow.intensity = 0.3;
   } else {
-    if (d) { monster.position.x += mx / d * mSpeed * dt; monster.position.z += mz / d * mSpeed * dt; }
-    pushOut(monster.position, 0.9);
+    moveMonster(mx, mz, d, mSpeed, dt);
     monster.rotation.y = Math.atan2(mx, mz);
     monster.rotation.x = 0;
     mPhase += dt * mSpeed * 1.1;
@@ -1067,6 +1068,37 @@ function update(dt) {
   stunEl.textContent = stun > 0 ? 'Монстр заморожен ' + stun.toFixed(1) + ' с' : '';
 }
 
+// chase with simple obstacle avoidance: when blocked (cabin wall, big rock), walk sideways
+// along it; if it still makes no progress for a long time, it re-appears behind you
+const nav = { detour: 0, side: 1, best: Infinity, since: 0 };
+function moveMonster(mx, mz, d, speed, dt) {
+  if (!d) return;
+  const p = monster.position, x0 = p.x, z0 = p.z;
+  let dx = mx / d, dz = mz / d;
+  if (nav.detour > 0) {
+    nav.detour -= dt;
+    dx = dx * 0.25 - mz / d * nav.side; dz = dz * 0.25 + mx / d * nav.side;
+    const l = Math.hypot(dx, dz); dx /= l; dz /= l;
+  }
+  p.x += dx * speed * dt; p.z += dz * speed * dt;
+  pushOut(p, 0.9);
+  const moved = Math.hypot(p.x - x0, p.z - z0);
+  if (moved < speed * dt * 0.35) {
+    if (nav.detour <= 0) nav.side = Math.random() < 0.5 ? 1 : -1;
+    else nav.side = -nav.side; // blocked while sidestepping too: try the other way
+    nav.detour = 1.5;
+  }
+  if (d < nav.best - 0.5) { nav.best = d; nav.since = 0; } else nav.since += dt;
+  if (nav.since > 6 && !Number.isNaN(d)) respawnMonster(18);
+  if (!Number.isFinite(p.x) || !Number.isFinite(p.z)) respawnMonster(20);
+}
+function respawnMonster(dist) {
+  // somewhere behind you, out of sight
+  const a = me.yaw + (Math.random() - 0.5) * 1.2;
+  monster.position.set(me.x + Math.sin(a) * dist, 0, me.z + Math.cos(a) * dist);
+  pushOut(monster.position, 0.9);
+  nav.detour = 0; nav.best = Infinity; nav.since = 0;
+}
 function animateLimbs(rig, phase, amp, kneeBend, armBase, elbowBase) {
   for (const l of rig.legs) {
     const p = phase + (l.s > 0 ? Math.PI : 0);
