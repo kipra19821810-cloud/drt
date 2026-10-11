@@ -47,11 +47,12 @@
   .ghost { background: transparent; color: var(--fg); outline: 1px solid var(--muted); }
   #time { white-space: nowrap; }
   #fps { font-family: var(--body); font-size: 0.85rem; color: var(--muted); }
-  .cine .bar { position: fixed; left: 0; right: 0; height: 12vh; background: #000; z-index: 5; display: flex; align-items: center; justify-content: center; padding-inline: 16px; }
+  .cine .bar { position: fixed; left: 0; right: 0; height: 8vh; background: #000; z-index: 5; display: flex; align-items: center; justify-content: center; padding-inline: 16px; }
   .cine .top { top: 0; justify-content: flex-end; }
   .cine .bottom { bottom: 0; }
   #sub { margin: 0; font: 400 clamp(1rem, 3.5vw, 1.4rem) var(--display); color: var(--fg); text-align: center; }
-  #skip { padding: 6px 12px; font-size: 0.85rem; }
+  #skip { position: fixed; z-index: 7; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; transform: translateX(-50%); padding: 6px 14px; min-height: 30px; font: 600 0.78rem var(--body); color: var(--fg); background: rgba(255,255,255,0.14); border-radius: 999px; outline: 1px solid rgba(255,255,255,0.35); touch-action: manipulation; }
+  #skip:hover { background: rgba(255,255,255,0.25); }
   .fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 6; transition: opacity 0.4s; }
   body.cine .hud, body.cine .hint, body.cine .cross, body.cine .fire, body.cine .vignette, body.cine .toast { display: none; }
   .over { position: fixed; z-index: 3; inset: 0; display: grid; align-items: safe center; justify-items: center; overflow-y: auto; padding-block: 16px; padding-inline: 16px; background: rgba(5,8,6,0.6); }
@@ -68,7 +69,7 @@
 <div class="vignette" id="vig"></div>
 <div class="scare" id="scare"></div>
 <div class="toast" id="toast" hidden></div>
-<div class="cine" id="cine" hidden><div class="bar top"><button id="skip" class="ghost" type="button">Пропустить ›</button></div><div class="bar bottom"><p id="sub"></p></div></div>
+<div class="cine" id="cine" hidden><div class="bar top"></div><div class="bar bottom"><p id="sub"></p></div><button id="skip" type="button">Пропустить сцену ›</button></div>
 <div class="fade" id="fade"></div>
 <div class="cross"></div>
 <button class="fire" id="fire" type="button">Огонь</button>
@@ -1299,7 +1300,7 @@ function endCutscene() {
   dog.g.position.copy(L(-0.1, 0, 11.5)); dog.g.rotation.set(0, 0, 0);
   if (!matchMedia('(pointer: coarse)').matches) toast('Кликни по экрану, чтобы управлять мышью. Беги!', 3);
 }
-document.getElementById('skip').addEventListener('click', e => { e.stopPropagation(); endCutscene(); });
+for (const ev of ['click', 'pointerdown']) document.getElementById('skip').addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); endCutscene(); });
 
 function runActor(dt, speed, phase) {
   animateLimbs(actor, phase, 0.75, 0.15, 0, -1.3);
