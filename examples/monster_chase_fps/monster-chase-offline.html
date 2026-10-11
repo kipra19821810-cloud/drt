@@ -47,6 +47,13 @@
   .ghost { background: transparent; color: var(--fg); outline: 1px solid var(--muted); }
   #time { white-space: nowrap; }
   #fps { font-family: var(--body); font-size: 0.85rem; color: var(--muted); }
+  .cine .bar { position: fixed; left: 0; right: 0; height: 12vh; background: #000; z-index: 5; display: flex; align-items: center; justify-content: center; padding-inline: 16px; }
+  .cine .top { top: 0; justify-content: flex-end; }
+  .cine .bottom { bottom: 0; }
+  #sub { margin: 0; font: 400 clamp(1rem, 3.5vw, 1.4rem) var(--display); color: var(--fg); text-align: center; }
+  #skip { padding: 6px 12px; font-size: 0.85rem; }
+  .fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 6; transition: opacity 0.4s; }
+  body.cine .hud, body.cine .hint, body.cine .cross, body.cine .fire, body.cine .vignette, body.cine .toast { display: none; }
   .over { position: fixed; z-index: 3; inset: 0; display: grid; align-items: safe center; justify-items: center; overflow-y: auto; padding-block: 16px; padding-inline: 16px; background: rgba(5,8,6,0.6); }
   .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
   .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
@@ -61,6 +68,8 @@
 <div class="vignette" id="vig"></div>
 <div class="scare" id="scare"></div>
 <div class="toast" id="toast" hidden></div>
+<div class="cine" id="cine" hidden><div class="bar top"><button id="skip" class="ghost" type="button">Пропустить ›</button></div><div class="bar bottom"><p id="sub"></p></div></div>
+<div class="fade" id="fade"></div>
 <div class="cross"></div>
 <button class="fire" id="fire" type="button">Огонь</button>
 <div class="hud"><span><span id="time">0.0 с</span> <span id="stun" class="stunned"></span></span><span class="right"><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><span id="fps" hidden></span><button id="snd" type="button">Звук: вкл</button><button id="opts" type="button">Настройки</button></span></div>
@@ -351,24 +360,58 @@ for (let i = 0; i < 80; i++) { const a = Math.random() * 6.3, r = rnd(ARENA + 4,
   }
 }
 
-// abandoned cabin with a lit window
+// abandoned cabin: a hollow room you can see into (door, glass window, furniture, candle)
 const cabin = pivot(scene, 18, 0, -15);
+const CAB = { x: 18, z: -15, floor: 0.25 };
+const L = (x, y, z) => new THREE.Vector3(CAB.x + x, y, CAB.z + z); // cabin-local -> world
+let cabinDoor, cabinGlass, candleFlame;
 {
-  const wood = texMat(plankTex, 0.95, { bumpScale: 0.05 }), dark = mat(0x1a1410, 0.9);
-  mesh(new THREE.BoxGeometry(6, 3, 5), wood, 0, 1.5, 0, cabin);
+  const wood = texMat(plankTex, 0.95, { bumpScale: 0.05, side: THREE.DoubleSide }), dark = mat(0x1a1410, 0.9);
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  // walls (front wall built around the door and window openings)
+  mesh(B(6, 3, 0.15), wood, 0, 1.5, -2.5, cabin);
+  for (const s of [-1, 1]) mesh(B(0.15, 3, 5), wood, s * 3, 1.5, 0, cabin);
+  for (const [w, h, x, y] of [[1.25, 3, -2.375, 1.5], [1.1, 1, -1.2, 2.5], [1.45, 3, 0.075, 1.5], [1, 1.3, 1.3, 0.65], [1, 0.9, 1.3, 2.55], [1.2, 3, 2.4, 1.5]])
+    mesh(B(w, h, 0.15), wood, x, y, 2.5, cabin);
+  mesh(B(6, 0.12, 5), wood, 0, 3.02, 0, cabin); // ceiling
   const roofM = mat(0x2a2420, 0.9, { map: plankTex.map });
-  for (const s of [-1, 1]) { const r = mesh(new THREE.BoxGeometry(6.6, 0.15, 3.3), roofM, 0, 3.75, s * 1.25, cabin); r.rotation.x = s * 0.6; }
-  for (const s of [-1, 1]) { const gable = mesh(new THREE.CylinderGeometry(0, 2.6, 1.4, 3, 1), wood, s * 2.95, 3.6, 0, cabin); gable.rotation.set(0, 0, Math.PI / 2 * 0); gable.scale.set(0.05, 1, 1); }
-  mesh(new THREE.BoxGeometry(1.1, 2, 0.08), dark, -1.2, 1, 2.52, cabin);
-  const win = mat(0xffb35a, 0.5, { emissive: 0xff9a30, emissiveIntensity: 1.4 });
-  mesh(new THREE.BoxGeometry(1, 0.8, 0.06), win, 1.3, 1.7, 2.52, cabin);
-  for (const [w, h, x, y] of [[1.15, 0.08, 1.3, 2.12], [1.15, 0.08, 1.3, 1.28], [0.08, 0.9, 0.75, 1.7], [0.08, 0.9, 1.85, 1.7], [0.06, 0.8, 1.3, 1.7], [1, 0.05, 1.3, 1.7]])
-    mesh(new THREE.BoxGeometry(w, h, 0.1), dark, x, y, 2.55, cabin);
-  mesh(new THREE.BoxGeometry(0.5, 1.6, 0.5), mat(0x3d3a36, 0.9, { map: stoneTex.map }), -2.2, 4.2, -0.8, cabin); // chimney
-  mesh(new THREE.BoxGeometry(6.4, 0.25, 5.4), mat(0x2a2018, 1), 0, 0.12, 0, cabin);
+  for (const s of [-1, 1]) { const r = mesh(B(6.6, 0.15, 3.3), roofM, 0, 3.75, s * 1.25, cabin); r.rotation.x = s * 0.6; }
+  for (const s of [-1, 1]) { const gable = mesh(new THREE.CylinderGeometry(0, 2.6, 1.4, 3, 1), wood, s * 2.95, 3.6, 0, cabin); gable.scale.set(0.05, 1, 1); }
+  // hinged door
+  cabinDoor = pivot(cabin, -1.75, 0.25, 2.5);
+  mesh(B(1.1, 2, 0.06), mat(0x3a2a1c, 0.9, { map: plankTex.map }), 0.55, 1, 0, cabinDoor);
+  mesh(new THREE.SphereGeometry(0.04, 8, 6), mat(0xb08a3a, 0.4, { metalness: 0.6 }), 0.95, 1, 0.06, cabinDoor);
+  // window: frame + glass
+  for (const [w, h, x, y] of [[1.15, 0.08, 1.3, 2.12], [1.15, 0.08, 1.3, 1.28], [0.08, 0.9, 0.75, 1.7], [0.08, 0.9, 1.85, 1.7]])
+    mesh(B(w, h, 0.2), dark, x, y, 2.5, cabin);
+  cabinGlass = mesh(new THREE.PlaneGeometry(1, 0.8), mat(0x9fb0c0, 0.1, { transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }), 1.3, 1.7, 2.5, cabin);
+  cabinGlass.castShadow = false;
+  mesh(B(0.5, 1.6, 0.5), mat(0x3d3a36, 0.9, { map: stoneTex.map }), -2.2, 4.2, -0.8, cabin); // chimney
+  mesh(B(6.4, 0.25, 5.4), mat(0x2a2018, 1), 0, 0.12, 0, cabin);                             // floor
+  // furniture
+  const f = CAB.floor, furn = mat(0x5a3f28, 0.8, { map: plankTex.map });
+  mesh(B(1.2, 0.06, 0.8), furn, 1.0, f + 0.75, -0.8, cabin);                                  // table
+  for (const [x, z] of [[0.45, -1.15], [1.55, -1.15], [0.45, -0.45], [1.55, -0.45]]) mesh(B(0.06, 0.72, 0.06), furn, x, f + 0.36, z, cabin);
+  for (const cx of [-0.15, 2.15]) {                                                           // two chairs
+    mesh(B(0.45, 0.05, 0.45), furn, cx, f + 0.45, -0.8, cabin);
+    for (const [x, z] of [[-0.19, -0.19], [0.19, -0.19], [-0.19, 0.19], [0.19, 0.19]]) mesh(B(0.04, 0.45, 0.04), furn, cx + x, f + 0.22, -0.8 + z, cabin);
+    mesh(B(0.04, 0.5, 0.45), furn, cx + (cx < 1 ? -0.21 : 0.21), f + 0.72, -0.8, cabin);
+  }
+  mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.14, 10), mat(0xf0e6d0, 0.6), 1.15, f + 0.85, -0.75, cabin); // candle
+  candleFlame = mesh(new THREE.SphereGeometry(0.022, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffc060 }), 1.15, f + 0.94, -0.75, cabin);
+  candleFlame.scale.y = 1.8; candleFlame.castShadow = false;
+  mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.08, 10), mat(0xd0d6dc, 0.3), 0.7, f + 0.82, -0.9, cabin);    // mug
+  mesh(B(0.9, 0.35, 1.9), mat(0x4a3424, 0.9), -2.3, f + 0.18, -1.4, cabin);                                   // bed
+  mesh(B(0.85, 0.12, 1.85), mat(0x6a4a5a, 0.95), -2.3, f + 0.41, -1.4, cabin);
+  mesh(B(0.5, 0.1, 0.3), mat(0xd8d0c0, 0.95), -2.3, f + 0.51, -2.15, cabin);                                 // pillow
+  const rug = mesh(new THREE.PlaneGeometry(1.8, 1.2), mat(0x7a2a2a, 1), 0.4, f + 0.01, 0.6, cabin); rug.rotation.x = -Math.PI / 2;
+  mesh(B(1.4, 0.05, 0.3), furn, -0.6, f + 1.7, -2.3, cabin);                                                // shelf
+  for (let i = 0; i < 4; i++) mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 8), mat([0x3a6a4a, 0x8a5a2a, 0xa0a0a0, 0x5a3a6a][i], 0.4), -1.1 + i * 0.32, f + 1.81, -2.3, cabin);
+  mesh(B(0.6, 0.45, 0.03), mat(0x2a2420, 0.8), 1.0, f + 1.7, -2.4, cabin);                                  // picture
+  mesh(B(0.5, 0.35, 0.02), mat(0x5a7a8a, 0.8), 1.0, f + 1.7, -2.38, cabin);
   boxes.push({ minX: 15, maxX: 21, minZ: -17.5, maxZ: -12.5 });
 }
-const cabinLight = new THREE.PointLight(0xff9a40, 1.6, 12, 2); cabinLight.position.set(19.3, 1.8, -11.8); scene.add(cabinLight);
+const cabinLight = new THREE.PointLight(0xff9a40, 1.6, 12, 2); cabinLight.position.copy(L(1.15, 1.4, -0.75)); scene.add(cabinLight);
 
 // sky: stars, moon with halo, drifting ground mist
 {
@@ -402,7 +445,7 @@ const motes = (() => {
 function animateWorld(t) {
   for (const s of mist) { s.position.x += s.userData.v * 0.016; if (s.position.x > ARENA + 5) s.position.x = -ARENA - 5; }
   motes.position.y = Math.sin(t * 0.7) * 0.15; motes.rotation.y = t * 0.01;
-  cabinLight.intensity = 1.4 + Math.sin(t * 13) * 0.12 + Math.sin(t * 7.3) * 0.1; // candle flicker
+  cabinLight.intensity = 2.2 + Math.sin(t * 13) * 0.15 + Math.sin(t * 7.3) * 0.1; // candle flicker
   if (typeof beast !== 'undefined' && beast.chest) beast.chest.scale.y = 1.1 + Math.sin(t * 2.2) * 0.04; // breathing
 }
 
@@ -529,6 +572,49 @@ function makeMonster() {
   }
   return { g, legs, arms, head, jaw, chest, skin: [hide, flesh], eyeM, eyeGlow };
 }
+
+// ---------- human ----------
+function makeHuman() {
+  const g = new THREE.Group();
+  const skin = mat(0xd9a07f, 0.6), shirt = mat(0x7a2e2e, 0.9), jeans = mat(0x2a3650, 0.95);
+  const shoe = mat(0x1c1c1c, 0.5), hair = mat(0x2b1a10, 0.95), white = mat(0xf2efe8, 0.4), dark = mat(0x1a1410, 0.4);
+  const legs = [], arms = [];
+  for (const s of [-1, 1]) {
+    const hip = pivot(g, s * 0.11, 0.95, 0);
+    mesh(new THREE.CylinderGeometry(0.085, 0.068, 0.46, 12), jeans, 0, -0.23, 0, hip);
+    const knee = pivot(hip, 0, -0.46, 0);
+    mesh(new THREE.CylinderGeometry(0.066, 0.05, 0.44, 12), jeans, 0, -0.22, 0, knee);
+    const shoeM = mesh(new THREE.BoxGeometry(0.11, 0.08, 0.27), shoe, 0, -0.47, 0.05, knee);
+    shoeM.geometry.translate(0, 0, 0);
+    legs.push({ hip, knee, s });
+  }
+  const pelvis = mesh(new THREE.CylinderGeometry(0.17, 0.16, 0.16, 16), jeans, 0, 0.98, 0, g); pelvis.scale.z = 0.7;
+  const torso = mesh(new THREE.CylinderGeometry(0.21, 0.165, 0.58, 16), shirt, 0, 1.33, 0, g); torso.scale.z = 0.62;
+  const chest = mesh(new THREE.SphereGeometry(0.21, 16, 12), shirt, 0, 1.55, 0, g); chest.scale.set(1.08, 0.45, 0.65);
+  mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.12, 10), skin, 0, 1.67, 0, g);
+  const head = pivot(g, 0, 1.82, 0);
+  const skull = mesh(new THREE.SphereGeometry(0.115, 20, 16), skin, 0, 0, 0, head); skull.scale.set(0.95, 1.18, 1.05);
+  const hairM = mesh(new THREE.SphereGeometry(0.122, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hair, 0, 0.025, -0.01, head);
+  hairM.scale.set(1, 1.15, 1.1); hairM.rotation.x = -0.25;
+  for (const s of [-1, 1]) {
+    mesh(new THREE.SphereGeometry(0.018, 8, 6), white, s * 0.042, 0.02, 0.1, head);
+    mesh(new THREE.SphereGeometry(0.009, 6, 4), dark, s * 0.042, 0.02, 0.116, head);
+    mesh(new THREE.SphereGeometry(0.022, 8, 6), skin, s * 0.118, 0.0, 0, head); // ears
+  }
+  const nose = mesh(new THREE.ConeGeometry(0.018, 0.045, 6), skin, 0, -0.015, 0.125, head); nose.rotation.x = Math.PI / 2;
+  mesh(new THREE.BoxGeometry(0.045, 0.008, 0.01), mat(0x8a4a40, 0.6), 0, -0.065, 0.11, head);
+  for (const s of [-1, 1]) {
+    const sh = pivot(g, s * 0.25, 1.56, 0); sh.rotation.z = s * 0.1;
+    mesh(new THREE.SphereGeometry(0.07, 10, 8), shirt, 0, 0, 0, sh);
+    mesh(new THREE.CylinderGeometry(0.062, 0.052, 0.3, 10), shirt, 0, -0.15, 0, sh);
+    const el = pivot(sh, 0, -0.3, 0);
+    mesh(new THREE.CylinderGeometry(0.045, 0.036, 0.27, 10), skin, 0, -0.135, 0, el);
+    const hand = mesh(new THREE.SphereGeometry(0.048, 10, 8), skin, 0, -0.31, 0, el); hand.scale.set(0.8, 1.2, 0.6);
+    arms.push({ sh, el, s });
+  }
+  return { g, legs, arms, head };
+}
+
 
 // ---------- heartbeat audio ----------
 let actx = null, soundOn = true, nextBeat = 0;
@@ -953,7 +1039,7 @@ function shoot() {
   if (ammo === 0) setTimeout(reload, 250);
 }
 function lockMouse() { try { const r = renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
-function begin() { initAudio(); startEl.hidden = true; started = true; reset(); lockMouse(); }
+function begin() { startCutscene(); }
 document.getElementById('go').addEventListener('click', begin);
 const fireBtn = document.getElementById('fire');
 fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); initAudio(); shoot(); });
@@ -964,6 +1050,7 @@ addEventListener('keydown', e => {
   initAudio();
   if (paused) return;
   const k = e.key.toLowerCase();
+  if (cut.on) { if (k === ' ' || k === 'enter' || k === 'escape') { e.preventDefault(); endCutscene(); } return; }
   if (k.startsWith('arrow') || k === ' ') e.preventDefault();
   keys[k] = true;
   if (over && k === 'enter') { reset(); lockMouse(); }
@@ -1160,6 +1247,143 @@ function animateLimbs(rig, phase, amp, kneeBend, armBase, elbowBase) {
 }
 let mPhase = 0;
 
+
+// ---------- intro cutscene ----------
+const actor = makeHuman(); actor.g.visible = false; scene.add(actor.g);
+const cineEl = document.getElementById('cine'), subEl = document.getElementById('sub'), fadeEl = document.getElementById('fade');
+const cut = { on: false, t: 0, flags: {} };
+const camLook = new THREE.Vector3(), tmpV = new THREE.Vector3(), faceT = new THREE.Vector3();
+const clamp01 = x => Math.max(0, Math.min(1, x)), ease = x => x * x * (3 - 2 * x);
+function camShot(pos, look) { camera.position.copy(pos); camLook.copy(look); camera.lookAt(camLook); }
+function lerpV(a, b, k) { return tmpV.copy(a).lerp(b, k); }
+function once(name, fn) { if (!cut.flags[name]) { cut.flags[name] = true; fn(); } }
+function placeMonsterFace(target, yaw) {
+  monster.rotation.set(0, yaw, 0); monster.position.set(target.x, 0, target.z);
+  monster.updateMatrixWorld(true);
+  const face = beast.head.localToWorld(faceT.set(0, -0.06, 0.42));
+  monster.position.x += target.x - face.x; monster.position.y += target.y - face.y; monster.position.z += target.z - face.z;
+}
+function sitActor() {
+  const a = actor;
+  a.g.position.copy(L(-0.15, CAB.floor - 0.42, -0.8)); a.g.rotation.set(0, Math.PI / 2, 0);
+  for (const l of a.legs) { l.hip.rotation.x = -1.5; l.knee.rotation.x = 1.45; }
+  for (const r of a.arms) { r.sh.rotation.x = -0.75; r.el.rotation.x = -0.9; }
+}
+function sitDog(x, z, yaw) {
+  dog.g.position.copy(L(x, CAB.floor, z)); dog.g.rotation.set(0, yaw, 0);
+  for (const lg of dog.legs) { if (lg.front) { lg.hip.rotation.x = 0.15; lg.knee.rotation.x = 0; } else { lg.hip.rotation.x = 0.9; lg.knee.rotation.x = -1.2; } }
+  dog.body.rotation.set(-0.3, 0, 0);
+}
+function startCutscene() {
+  initAudio();
+  startEl.hidden = true; cut.on = true; cut.t = 0; cut.flags = {};
+  document.body.classList.add('cine'); cineEl.hidden = false; subEl.textContent = '';
+  gun.visible = false; flash.intensity = 0;
+  cabinDoor.rotation.y = 0; cabinGlass.visible = true;
+  actor.g.visible = true; sitActor();
+  dog.state = 'cine'; dog.g.visible = true; sitDog(0.55, 0.1, Math.PI / 2 + 0.6);
+  monster.position.set(CAB.x + 1.3, -8, CAB.z + 4); // hidden below ground until its moment
+  stun = 0;
+}
+function endCutscene() {
+  if (!cut.on) return;
+  cut.on = false; cineEl.hidden = true; document.body.classList.remove('cine');
+  fadeEl.style.opacity = 0;
+  cabinDoor.rotation.y = -1.9; cabinGlass.visible = false; // the door stays open, the window broken
+  actor.g.visible = false; dog.body.rotation.set(0, 0, 0);
+  gun.visible = true; flash.intensity = 3.2;
+  started = true; reset();
+  // the chase starts right outside the cabin, the monster coming round the corner
+  const p = L(-0.6, 0, 10); me.x = p.x; me.z = p.z; me.yaw = Math.PI; me.pitch = -0.05;
+  monster.position.copy(L(2.6, 0, 4.5));
+  dog.g.position.copy(L(-0.1, 0, 11.5)); dog.g.rotation.set(0, 0, 0);
+  if (!matchMedia('(pointer: coarse)').matches) toast('Кликни по экрану, чтобы управлять мышью. Беги!', 3);
+}
+document.getElementById('skip').addEventListener('click', e => { e.stopPropagation(); endCutscene(); });
+
+function runActor(dt, speed, phase) {
+  animateLimbs(actor, phase, 0.75, 0.15, 0, -1.3);
+  actor.g.position.y = Math.abs(Math.sin(phase)) * 0.06;
+}
+function updateCutscene(dt, now) {
+  const t = (cut.t += dt);
+  const head = actor.head;
+  candleFlame.scale.x = 1 + Math.sin(now * 0.02) * 0.15;
+  if (t < 4) {
+    // 1. a quiet night in the cabin
+    subEl.textContent = 'Ночь. Старая хижина в глухом лесу.';
+    camShot(lerpV(L(-2.5, 2.05, -2.15), L(-2.0, 1.9, -1.6), ease(t / 4)), L(0.7, 0.85, -0.4));
+    head.rotation.set(0.25 + Math.sin(t * 0.8) * 0.05, -0.3, 0);
+    dog.tail.rotation.z = Math.sin(t * 10) * 0.5;
+    dog.head.rotation.y = Math.sin(t * 0.7) * 0.2;
+  } else if (t < 7) {
+    // 2. the chihuahua hears something; both turn to the window
+    subEl.textContent = 'Чихуахуа что-то услышала за окном…';
+    const k = ease(clamp01((t - 4.4) / 0.8));
+    dog.head.rotation.y = -0.8 * k; dog.tail.rotation.z *= 0.9;
+    for (const s of [-1, 1]) dog.g.userData['ear' + s].rotation.x = -0.2 - 0.3 * k;
+    if (t > 4.6) once('bark1', () => { bark(); dog.jaw.rotation.x = 0.5; });
+    if (t > 5.6) once('bark2', () => { bark(); dog.jaw.rotation.x = 0.5; });
+    dog.jaw.rotation.x = Math.max(0.1, dog.jaw.rotation.x - dt * 2);
+    const hk = ease(clamp01((t - 5.0) / 0.9));
+    head.rotation.set(0.05, -1.1 * hk - 0.3 * (1 - hk), 0);
+    camShot(lerpV(L(-1.0, 1.6, -1.6), L(-0.8, 1.6, -1.25), ease((t - 4) / 3)), L(1.3, 1.65, 2.5));
+  } else if (t < 10) {
+    // 3. the monster rises up behind the glass
+    subEl.textContent = '';
+    camShot(lerpV(L(1.3, 1.55, 0.9), L(1.3, 1.6, 1.35), ease((t - 7) / 3)), L(1.3, 1.75, 3.2));
+    const k = ease(clamp01((t - 7.3) / 1.3));
+    beast.head.rotation.x = -1.1;
+    placeMonsterFace(L(1.3, 0.55 + 1.3 * k, 3.3 + Math.sin(t * 7) * 0.02), Math.PI);
+    beast.eyeM.emissiveIntensity = 2 + 3 * k; beast.eyeGlow.intensity = 3 * k;
+    beast.jaw.rotation.x = t > 8.5 ? Math.min(0.85, 0.2 + (t - 8.5) * 2) : 0.15;
+    beast.head.rotation.z = t > 8.5 ? Math.sin(t * 40) * 0.12 : 0;
+    for (const a of beast.arms) a.sh.rotation.x = -0.35 + Math.sin(t * 3 + a.s) * 0.15; // arms down, outside the wall
+    if (t > 8.5) once('roar', () => { roar(); noiseBurst(0.6, 0.7, 400); });
+    if (t > 9.2) once('glass', () => { cabinGlass.visible = false; noiseBurst(0.5, 1.0, 7000); });
+    shake = t > 8.5 ? 0.025 : 0;
+    camera.rotation.x += (Math.random() - 0.5) * shake; camera.rotation.y += (Math.random() - 0.5) * shake;
+  } else if (t < 14) {
+    // 4. they burst out of the door and run; the monster comes round the corner
+    subEl.textContent = 'Бежим!';
+    shake = 0;
+    const rt = t - 10.15;
+    once('door', () => { noiseBurst(0.3, 0.9, 600); beast.head.rotation.x = -0.75; beast.head.rotation.z = 0; });
+    cabinDoor.rotation.y = -1.9 * ease(clamp01((t - 10) / 0.25));
+    if (rt > 0) {
+      const k = clamp01(rt / 3.85);
+      const ap = lerpV(L(-1.2, 0, 1.6), L(-0.6, 0, 10), k);
+      actor.g.position.set(ap.x, 0, ap.z); actor.g.rotation.set(0, 0.07, 0);
+      head.rotation.set(0, k < 0.5 ? 0 : Math.sin(rt * 2) * 0.6, 0); // glancing back
+      runActor(dt, 4.6, rt * 10);
+      dog.g.position.copy(lerpV(L(-1.0, 0, 2.0), L(-0.1, 0, 11.5), k));
+      dog.g.rotation.set(0, 0.08, 0); dog.body.rotation.set(0, 0, 0);
+      animateDog(dt, 8, t);
+    }
+    if (t > 11.2) { // monster lurches round the corner after them
+      const mk = clamp01((t - 11.2) / 2.8);
+      const mp = lerpV(L(4.2, 0, 1.0), L(2.6, 0, 4.5), mk);
+      monster.position.set(mp.x, 0, mp.z);
+      monster.rotation.set(0, Math.atan2(actor.g.position.x - mp.x, actor.g.position.z - mp.z), 0);
+      beast.eyeM.emissiveIntensity = 3; beast.eyeGlow.intensity = 2.2;
+      mPhase += dt * 4.5; animateLimbs(beast, mPhase, 0.55, 0.35, -1.0, -0.5);
+      for (const a of beast.arms) a.sh.rotation.x = -1.2 + Math.sin(mPhase * 2 + a.s) * 0.35;
+      beast.jaw.rotation.x = 0.4 + Math.abs(Math.sin(t * 3)) * 0.3;
+      monster.position.y = Math.abs(Math.sin(mPhase)) * 0.12;
+    } else monster.position.y = -8;
+    camera.position.copy(L(-7, 2.1, 10.5));
+    camera.lookAt(tmpV.copy(actor.g.position).add(L(1.2, 1.1, -2).sub(L(0, 0, 0))));
+  } else if (t < 15.2) {
+    // 5. into the runner's eyes — the game begins
+    subEl.textContent = '';
+    const k = ease(clamp01((t - 14) / 0.9));
+    const from = L(-7, 2.1, 10.5), eye = L(-0.6, 1.65, 10);
+    camera.position.copy(from.lerp(eye, k));
+    camera.lookAt(L(-0.6, 1.2, 10).lerp(L(-0.6, 1.6, 24), k));
+    fadeEl.style.opacity = clamp01((t - 14.5) / 0.5);
+  } else endCutscene();
+}
+
 // ---------- graphics settings ----------
 const PRESETS = {
   low:    { res: 50,  shadows: 'off',   grass: 'off',  mist: false, far: false },
@@ -1236,12 +1460,14 @@ addEventListener('resize', resize);
 let lastT = performance.now();
 function loop(now) {
   const dt = Math.min((now - lastT) / 1000, 0.05); lastT = now;
-  if (!paused) update(dt);
+  if (cut.on) updateCutscene(dt, now); else if (!paused) update(dt);
   animateWorld(now / 1000);
   fpsFrames++;
   if (now - fpsT > 500) { fpsEl.textContent = 'FPS ' + Math.round(fpsFrames * 1000 / (now - fpsT)); fpsFrames = 0; fpsT = now; }
-  camera.position.set(me.x, EYE + Math.sin(bob) * 0.05, me.z);
-  camera.rotation.set(me.pitch + (Math.random() - 0.5) * shake, me.yaw + (Math.random() - 0.5) * shake, Math.sin(bob * 0.5) * 0.012 + (Math.random() - 0.5) * shake);
+  if (!cut.on) {
+    camera.position.set(me.x, EYE + Math.sin(bob) * 0.05, me.z);
+    camera.rotation.set(me.pitch + (Math.random() - 0.5) * shake, me.yaw + (Math.random() - 0.5) * shake, Math.sin(bob * 0.5) * 0.012 + (Math.random() - 0.5) * shake);
+  }
   recoil = Math.max(0, recoil - dt * 8);
   flashT = Math.max(0, flashT - dt);
   muzzle.visible = flashT > 0; muzzleLight.intensity = flashT > 0 ? 4 : 0;
