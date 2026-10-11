@@ -55,6 +55,9 @@
   #skip:hover { background: rgba(255,255,255,0.25); }
   .fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 6; transition: opacity 0.4s; }
   body.cine .hud, body.cine .hint, body.cine .cross, body.cine .fire, body.cine .vignette, body.cine .toast { display: none; }
+  .hidebtn { position: fixed; z-index: 2; right: 112px; bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); padding: 12px 16px; background: #2f6b3a; color: var(--fg); font: 600 0.95rem var(--body); box-shadow: 0 4px 16px rgba(0,0,0,0.5); touch-action: none; }
+  .leaves { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  body.cine .hidebtn { display: none; }
   .over { position: fixed; z-index: 3; inset: 0; display: grid; align-items: safe center; justify-items: center; overflow-y: auto; padding-block: 16px; padding-inline: 16px; background: rgba(5,8,6,0.6); }
   .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
   .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
@@ -73,8 +76,10 @@
 <div class="fade" id="fade"></div>
 <div class="cross"></div>
 <button class="fire" id="fire" type="button">Огонь</button>
-<div class="hud"><span><span id="time">0.0 с</span> <span id="stun" class="stunned"></span></span><span class="right"><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><span id="fps" hidden></span><button id="snd" type="button">Звук: вкл</button><button id="opts" type="button">Настройки</button></span></div>
-<p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, клик, <kbd>Пробел</kbd> или кнопка «Огонь» — выстрел, <kbd>R</kbd> — перезарядка, <kbd>Shift</kbd> — бег. Попадание замораживает монстра на 3 секунды.</p>
+<button class="hidebtn" id="hidebtn" type="button" hidden>Спрятаться</button>
+<canvas class="leaves" id="leaves" hidden></canvas>
+<div class="hud"><span><span id="time">0.0 с</span> <span id="stun" class="stunned"></span></span><span class="right"><span id="hides">Кусты: 2</span><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><span id="fps" hidden></span><button id="snd" type="button">Звук: вкл</button><button id="opts" type="button">Настройки</button></span></div>
+<p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, клик, <kbd>Пробел</kbd> или кнопка «Огонь» — выстрел, <kbd>E</kbd> у куста — спрятаться (2 раза, до 10 с), <kbd>R</kbd> — перезарядка, <kbd>Shift</kbd> — бег. Попадание замораживает монстра на 3 секунды.</p>
 <div class="over" id="start">
   <div class="card">
     <h2>Ночной лес</h2>
@@ -289,13 +294,14 @@ const trees = [], boxes = [];
   }
 }
 
-// bushes
+// bushes (you can hide in them)
+const bushes = [];
 {
   const leaf = mat(0x1f3a1c, 0.95, { flatShading: true });
   for (let i = 0; i < 45; i++) {
     const x = rnd(-ARENA + 2, ARENA - 2), z = rnd(-ARENA + 2, ARENA - 2);
     if (Math.hypot(x, z) < 5) continue;
-    const g = pivot(scene, x, 0, z);
+    const g = pivot(scene, x, 0, z); bushes.push({ x, z, g });
     for (let k = 0; k < 5; k++) { const b = mesh(rough(new THREE.IcosahedronGeometry(rnd(0.35, 0.6), 1), 0.3), leaf, rnd(-0.5, 0.5), rnd(0.25, 0.6), rnd(-0.5, 0.5), g); b.scale.y = 0.8; }
   }
 }
@@ -981,6 +987,7 @@ const overEl = document.getElementById('over'), startEl = document.getElementByI
 const resultEl = document.getElementById('result'), vig = document.getElementById('vig');
 
 function reset() {
+  hidden = false; hideT = 0; hidesLeft = HIDE_COUNT; hideBush = null; leavesEl.hidden = true;
   me.x = 0; me.z = 0; me.yaw = 0; me.pitch = 0;
   // monster appears somewhere far away, not in front of you
   const a = (Math.random() - 0.5) * Math.PI;
@@ -1018,7 +1025,7 @@ function reload() {
   reloading = RELOAD_TIME; noiseBurst(0.05, 0.4, 3000);
 }
 function shoot() {
-  if (!started || over || reloading) return;
+  if (!started || over || reloading || hidden) return;
   if (ammo <= 0) { noiseBurst(0.03, 0.3, 4000); reload(); return; }
   ammo--; recoil = 1; flashT = 0.06;
   noiseBurst(0.25, 1.2, 1800);
@@ -1030,6 +1037,70 @@ function shoot() {
     if (stun <= 0) { stun = STUN_TIME; shriek(); } // a stunned monster can't be stunned longer
   }
   if (ammo === 0) setTimeout(reload, 250);
+}
+// ---------- hiding in bushes: at most 10 s, at most twice per game ----------
+const HIDE_TIME = 10, HIDE_COUNT = 2;
+let hidden = false, hideT = 0, hidesLeft = HIDE_COUNT, hideBush = null;
+const wander = { x: 0, z: 0 };
+const hideBtn = document.getElementById('hidebtn'), hidesEl = document.getElementById('hides'), leavesEl = document.getElementById('leaves');
+function nearestBush() {
+  let best = null, bd = 1.6;
+  for (const b of bushes) { const d = Math.hypot(b.x - me.x, b.z - me.z); if (d < bd) { bd = d; best = b; } }
+  return best;
+}
+function drawLeaves() { // a frame of leaves around the screen, clear in the middle
+  const w = leavesEl.width = innerWidth, h = leavesEl.height = innerHeight, x = leavesEl.getContext('2d');
+  const g = x.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.7);
+  g.addColorStop(0, 'rgba(10,30,12,0)'); g.addColorStop(1, 'rgba(8,24,10,0.85)');
+  x.fillStyle = g; x.fillRect(0, 0, w, h);
+  for (let i = 0; i < 260; i++) {
+    const px = Math.random() * w, py = Math.random() * h;
+    const edge = Math.max(Math.abs(px / w - 0.5), Math.abs(py / h - 0.5)) * 2;
+    if (Math.random() > edge * edge * 1.3) continue;
+    const r = 18 + Math.random() * 40;
+    x.save(); x.translate(px, py); x.rotate(Math.random() * 6.3);
+    x.fillStyle = ['#183a1a', '#1f4a22', '#12301a', '#2a5a2a'][i % 4];
+    x.beginPath(); x.ellipse(0, 0, r, r * 0.42, 0, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = 'rgba(0,0,0,0.35)'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(-r, 0); x.lineTo(r, 0); x.stroke();
+    x.restore();
+  }
+}
+function pickWander(cx, cz) {
+  // a search point near (cx, cz) but never right on top of your bush
+  for (let i = 0; i < 8; i++) {
+    const a = Math.random() * 6.3, r = rnd(5, 9), lim = ARENA - 2;
+    wander.x = Math.max(-lim, Math.min(lim, cx + Math.cos(a) * r));
+    wander.z = Math.max(-lim, Math.min(lim, cz + Math.sin(a) * r));
+    if (!hideBush || Math.hypot(wander.x - hideBush.x, wander.z - hideBush.z) > 4.5) return;
+  }
+}
+function rustle(b) { noiseBurst(0.35, 0.35, 2500); if (b) b.shake = 0.5; }
+function enterBush() {
+  const b = nearestBush();
+  if (!b || hidden || hidesLeft <= 0 || !started || over) return;
+  hidden = true; hideT = HIDE_TIME; hidesLeft--; hideBush = b;
+  me.x = b.x; me.z = b.z;
+  pickWander(b.x, b.z); // it only knows roughly where you were
+  drawLeaves(); leavesEl.hidden = false; rustle(b);
+  toast('Ты в кустах. Монстр тебя не видит — у тебя 10 секунд.', 2.5);
+}
+function leaveBush(forced) {
+  if (!hidden) return;
+  hidden = false; leavesEl.hidden = true; rustle(hideBush); hideBush = null;
+  toast(forced ? 'Дольше сидеть нельзя — беги!' : (hidesLeft ? 'Ты вылез из кустов.' : 'Укрытий больше нет — только бежать!'), 2.5);
+}
+function toggleHide() { hidden ? leaveBush(false) : enterBush(); }
+hideBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); initAudio(); toggleHide(); });
+function updateHiding(dt) {
+  if (hidden) {
+    hideT -= dt;
+    if (hideT <= 0) leaveBush(true);
+  }
+  const canHide = !hidden && hidesLeft > 0 && nearestBush();
+  hideBtn.hidden = !(hidden || canHide);
+  hideBtn.textContent = hidden ? 'Вылезти (E)' : 'Спрятаться (E)';
+  hidesEl.textContent = hidden ? 'В кустах ' + Math.max(0, hideT).toFixed(1) + ' с' : 'Кусты: ' + hidesLeft;
+  for (const b of bushes) if (b.shake > 0) { b.shake -= dt; b.g.rotation.z = Math.sin(b.shake * 60) * 0.08 * b.shake; }
 }
 function lockMouse() { try { const r = renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
 function begin() { startCutscene(); }
@@ -1048,6 +1119,7 @@ addEventListener('keydown', e => {
   keys[k] = true;
   if (over && k === 'enter') { reset(); lockMouse(); }
   if (k === 'r' || k === 'к') reload();
+  if ((k === 'e' || k === 'у') && !e.repeat) toggleHide();
   if ((k === ' ' || k === 'f' || k === 'а') && !e.repeat) shoot();
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
@@ -1127,6 +1199,7 @@ function update(dt) {
     const ox = p.x - p.sx, oy = p.y - p.sy;
     if (Math.hypot(ox, oy) > 12) { s = ox / 60; f = -oy / 60; }
   }
+  if (hidden) { f = 0; s = 0; }
   const len = Math.hypot(f, s);
   if (len > 1) { f /= len; s /= len; }
   const moving = len > 0.05;
@@ -1160,8 +1233,24 @@ function update(dt) {
     monster.position.y = 0;
     beast.eyeM.emissiveIntensity = 0.4; beast.eyeGlow.intensity = 0.3;
   } else {
-    moveMonster(mx, mz, d, mSpeed, dt);
-    monster.rotation.y = Math.atan2(mx, mz);
+    if (hidden) {
+      // it can't see you: prowl around where you vanished
+      let wx = wander.x - monster.position.x, wz = wander.z - monster.position.z, wd = Math.hypot(wx, wz);
+      if (wd < 1) {
+        pickWander(monster.position.x, monster.position.z);
+        wx = wander.x - monster.position.x; wz = wander.z - monster.position.z; wd = Math.hypot(wx, wz);
+      }
+      moveMonster(wx, wz, wd, mSpeed * 0.55, dt);
+      if (hideBush) { // sniffs around, but never walks into your bush
+        const bx = monster.position.x - hideBush.x, bz = monster.position.z - hideBush.z, bd = Math.hypot(bx, bz) || 1;
+        if (bd < 3.5) { monster.position.x = hideBush.x + bx / bd * 3.5; monster.position.z = hideBush.z + bz / bd * 3.5; }
+      }
+      nav.since = 0; nav.best = Infinity;
+      monster.rotation.y = Math.atan2(wx, wz);
+    } else {
+      moveMonster(mx, mz, d, mSpeed, dt);
+      monster.rotation.y = Math.atan2(mx, mz);
+    }
     monster.rotation.x = 0;
     mPhase += dt * mSpeed * 1.1;
     animateLimbs(beast, mPhase, 0.55, 0.35, -1.0, -0.5);
@@ -1182,9 +1271,11 @@ function update(dt) {
   }
   updateDog(dt, time); updateHearts(dt);
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
-  if (d < 1.5 && stun <= 0 && dog.state === 'follow') dogSave();
+  updateHiding(dt);
+  if (hidden) { /* safe while hidden */ }
+  else if (d < 1.5 && stun <= 0 && dog.state === 'follow') dogSave();
   else if (d < 1.5 && stun <= 0) {
-    over = true; best = Math.max(best, time);
+    over = true; best = Math.max(best, time); hideBtn.hidden = true; leavesEl.hidden = true;
     resultEl.textContent = 'Ты продержался ' + time.toFixed(1) + ' с, попаданий: ' + hits;
     vig.style.opacity = 1; scareT = 0; scream();
   }
@@ -1280,7 +1371,7 @@ function startCutscene() {
 }
 function endCutscene() {
   if (!cut.on) return;
-  cut.on = false; cineEl.hidden = true; document.body.classList.remove('cine');
+  cut.on = false; cineEl.hidden = true; hideBtn.hidden = true; document.body.classList.remove('cine');
   fadeEl.style.opacity = 0;
   cabinDoor.rotation.y = -1.9; cabinGlass.visible = false; // the door stays open, the window broken
   actor.g.visible = false; dog.body.rotation.set(0, 0, 0);
@@ -1458,7 +1549,7 @@ function loop(now) {
   fpsFrames++;
   if (now - fpsT > 500) { fpsEl.textContent = 'FPS ' + Math.round(fpsFrames * 1000 / (now - fpsT)); fpsFrames = 0; fpsT = now; }
   if (!cut.on) {
-    camera.position.set(me.x, EYE + Math.sin(bob) * 0.05, me.z);
+    camera.position.set(me.x, (hidden ? 0.85 : EYE) + Math.sin(bob) * 0.05, me.z);
     camera.rotation.set(me.pitch + (Math.random() - 0.5) * shake, me.yaw + (Math.random() - 0.5) * shake, Math.sin(bob * 0.5) * 0.012 + (Math.random() - 0.5) * shake);
   }
   recoil = Math.max(0, recoil - dt * 8);
