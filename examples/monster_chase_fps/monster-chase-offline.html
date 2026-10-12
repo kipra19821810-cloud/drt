@@ -58,6 +58,9 @@
   .hidebtn { position: fixed; z-index: 2; right: 112px; bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); padding: 12px 16px; background: #2f6b3a; color: var(--fg); font: 600 0.95rem var(--body); box-shadow: 0 4px 16px rgba(0,0,0,0.5); touch-action: none; }
   .leaves { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
   body.cine .hidebtn { display: none; }
+  .goal { position: fixed; z-index: 2; left: 16px; top: calc(env(safe-area-inset-top, 0px) + 46px); display: flex; gap: 8px; align-items: center; font: 600 0.95rem var(--body); text-shadow: 0 2px 6px #000; pointer-events: none; }
+  .goal .arrow { display: inline-block; font: 400 1.3rem var(--display); color: #ffd28a; }
+  body.cine .goal { display: none; }
   .over { position: fixed; z-index: 3; inset: 0; display: grid; align-items: safe center; justify-items: center; overflow-y: auto; padding-block: 16px; padding-inline: 16px; background: rgba(5,8,6,0.6); }
   .card { background: var(--panel); padding: 24px 28px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
   .card h2 { font-family: var(--display); font-weight: 400; color: var(--monster); font-size: 2.2rem; margin: 0; }
@@ -70,6 +73,7 @@
 
 <div id="game"></div>
 <div class="vignette" id="vig"></div>
+<div class="goal" id="goal"><span id="goal-arrow" class="arrow" hidden>↑</span><span id="goal-text"></span></div>
 <div class="scare" id="scare"></div>
 <div class="toast" id="toast" hidden></div>
 <div class="cine" id="cine" hidden><div class="bar top"></div><div class="bar bottom"><p id="sub"></p></div><button id="skip" type="button">Пропустить сцену ›</button></div>
@@ -79,7 +83,7 @@
 <button class="hidebtn" id="hidebtn" type="button" hidden>Спрятаться</button>
 <canvas class="leaves" id="leaves" hidden></canvas>
 <div class="hud"><span><span id="time">0.0 с</span> <span id="stun" class="stunned"></span></span><span class="right"><span id="hides">Кусты: 2</span><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><span id="fps" hidden></span><button id="snd" type="button">Звук: вкл</button><button id="opts" type="button">Настройки</button></span></div>
-<p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, клик, <kbd>Пробел</kbd> или кнопка «Огонь» — выстрел, <kbd>E</kbd> у куста — спрятаться (2 раза, до 10 с), <kbd>R</kbd> — перезарядка, <kbd>Shift</kbd> — бег. Попадание замораживает монстра на 3 секунды.</p>
+<p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, клик, <kbd>Пробел</kbd> или кнопка «Огонь» — выстрел, <kbd>E</kbd> у куста — спрятаться (2 раза, до 10 с), <kbd>R</kbd> — перезарядка, <kbd>Shift</kbd> — бег. Попадание замораживает монстра на 3 секунды. Продержись 60 секунд — откроются ворота.</p>
 <div class="over" id="start">
   <div class="card">
     <h2>Ночной лес</h2>
@@ -267,7 +271,7 @@ function rough(geo, amt) {
 
 // ---------- ground ----------
 const groundGeo = new THREE.PlaneGeometry(140, 140, 70, 70);
-{ const p = groundGeo.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), r = Math.hypot(x, y); p.setZ(i, (Math.sin(x * 0.35) * Math.cos(y * 0.3)) * 0.08 + (r > ARENA + 2 ? (r - ARENA) * 0.12 : 0)); } groundGeo.computeVertexNormals(); }
+{ const p = groundGeo.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), r = Math.hypot(x, y); p.setZ(i, (Math.sin(x * 0.35) * Math.cos(y * 0.3)) * 0.08 + (r > ARENA + 2 && !(Math.abs(x) < 30 && y > ARENA - 2) ? (r - ARENA) * 0.12 : 0)); } groundGeo.computeVertexNormals(); }
 const ground = new THREE.Mesh(groundGeo, texMat(groundTex, 1, { bumpScale: 0.06 }));
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
@@ -295,7 +299,7 @@ const trees = [], boxes = [];
   const stone = texMat(stoneTex, 0.9, { flatShading: true });
   for (let i = 0; i < 70; i++) {
     const x = rnd(-ARENA + 2, ARENA - 2), z = rnd(-ARENA + 2, ARENA - 2), s = rnd(0.15, 0.9);
-    if (Math.hypot(x, z) < 5) continue;
+    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6) continue;
     const r = mesh(rough(new THREE.DodecahedronGeometry(1, 1), 0.35), stone, x, s * 0.3, z, scene);
     r.scale.set(s * rnd(0.8, 1.4), s * rnd(0.5, 0.9), s * rnd(0.8, 1.4)); r.rotation.y = Math.random() * 6;
     if (s > 0.5) trees.push({ x, z, r: s });
@@ -308,7 +312,7 @@ const bushes = [];
   const leaf = mat(0x1f3a1c, 0.95, { flatShading: true });
   for (let i = 0; i < 45; i++) {
     const x = rnd(-ARENA + 2, ARENA - 2), z = rnd(-ARENA + 2, ARENA - 2);
-    if (Math.hypot(x, z) < 5) continue;
+    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6) continue;
     const g = pivot(scene, x, 0, z); bushes.push({ x, z, g });
     for (let k = 0; k < 5; k++) { const b = mesh(rough(new THREE.IcosahedronGeometry(rnd(0.35, 0.6), 1), 0.3), leaf, rnd(-0.5, 0.5), rnd(0.25, 0.6), rnd(-0.5, 0.5), g); b.scale.y = 0.8; }
   }
@@ -344,13 +348,13 @@ function deadTree(x, z, h) {
 }
 for (let i = 0; i < 40; i++) {
   const x = rnd(-ARENA + 4, ARENA - 4), z = rnd(-ARENA + 4, ARENA - 4);
-  if (Math.hypot(x, z) < 8 || (Math.abs(x - 18) < 6 && Math.abs(z + 15) < 5.5)) continue;
+  if (Math.hypot(x, z) < 8 || Math.hypot(x, z + ARENA) < 7 || (Math.abs(x - 18) < 6 && Math.abs(z + 15) < 5.5)) continue;
   const h = rnd(1, 1.5);
   if (i % 6 === 0) { deadTree(x, z, h); trees.push({ x, z, r: 0.35 * h + 0.1 }); }
   else { pine(x, z, h); trees.push({ x, z, r: 0.42 * h + 0.15 }); }
 }
 const farTrees = [];
-for (let i = 0; i < 80; i++) { const a = Math.random() * 6.3, r = rnd(ARENA + 4, ARENA + 22); farTrees.push(pine(Math.cos(a) * r, Math.sin(a) * r, rnd(1.1, 1.8))); }
+for (let i = 0; i < 80; i++) { const a = Math.random() * 6.3, r = rnd(ARENA + 4, ARENA + 22); if (Math.abs(Math.cos(a) * r) < 30 && Math.sin(a) * r < -ARENA + 2) continue; farTrees.push(pine(Math.cos(a) * r, Math.sin(a) * r, rnd(1.1, 1.8))); }
 
 // fence: leaning posts with rails, some rails broken
 {
@@ -358,8 +362,11 @@ for (let i = 0; i < 80; i++) { const a = Math.random() * 6.3, r = rnd(ARENA + 4,
   const postGeo = new THREE.BoxGeometry(0.22, 1.4, 0.22), railGeo = new THREE.BoxGeometry(4.05, 0.12, 0.05);
   const sides = [[1, 0, 0, -ARENA], [1, 0, 0, ARENA], [0, 1, -ARENA, 0], [0, 1, ARENA, 0]];
   for (const [ax, az, ox, oz] of sides) for (let i = -ARENA; i < ARENA; i += 4) {
-    const p = mesh(postGeo, wood, ox + ax * i, 0.7, oz + az * i, scene); p.rotation.set(rnd(-0.08, 0.08), rnd(-0.2, 0.2), rnd(-0.08, 0.08));
+    const gateSide = !az && oz === -ARENA;
+    const p = gateSide && i === 0 ? null : mesh(postGeo, wood, ox + ax * i, 0.7, oz + az * i, scene);
+    if (p) p.rotation.set(rnd(-0.08, 0.08), rnd(-0.2, 0.2), rnd(-0.08, 0.08));
     for (const y of [0.45, 1.0]) {
+      if (gateSide && Math.abs(i + 2) < 4) continue;
       if (Math.random() < 0.15) continue;
       const r = mesh(railGeo, wood, ox + ax * (i + 2), y + rnd(-0.04, 0.04), oz + az * (i + 2), scene);
       r.rotation.y = az ? Math.PI / 2 : 0; r.rotation.z = rnd(-0.03, 0.03);
@@ -419,6 +426,189 @@ let cabinDoor, cabinGlass, candleFlame;
   boxes.push({ minX: 15, maxX: 21, minZ: -17.5, maxZ: -12.5 });
 }
 const cabinLight = new THREE.PointLight(0xff9a40, 1.6, 12, 2); cabinLight.position.copy(L(1.15, 1.4, -0.75)); scene.add(cabinLight);
+
+// ---------- north: gate, fenced path, plaza, nine-storey building ----------
+const ZONE = {
+  forest:   { x0: -ARENA, x1: ARENA, z0: -ARENA, z1: ARENA },
+  corridor: { x0: -2.5, x1: 2.5, z0: -101, z1: -38.5 },
+  pathOnly: { x0: -2.5, x1: 2.5, z0: -101, z1: -40.6 },  // gate shut behind you
+  plaza:    { x0: -14, x1: 14, z0: -112, z1: -99.5 },
+};
+const ZONES_FOREST = [ZONE.forest], ZONES_ALL = [ZONE.forest, ZONE.corridor, ZONE.plaza];
+function clampZones(p, r, zones) {
+  let bx = p.x, bz = p.z, bd = Infinity;
+  for (const z of zones) {
+    const cx = Math.max(z.x0 + r, Math.min(z.x1 - r, p.x)), cz = Math.max(z.z0 + r, Math.min(z.z1 - r, p.z));
+    const d = Math.hypot(p.x - cx, p.z - cz);
+    if (d === 0) return;
+    if (d < bd) { bd = d; bx = cx; bz = cz; }
+  }
+  p.x = bx; p.z = bz;
+}
+let gateL, gateR, gateLight, roomLight, roomGlass, brokenDecal, doorLight;
+{
+  const wood = texMat(plankTex, 1, { bumpScale: 0.05 }), metal = mat(0x2c2f33, 0.5, { metalness: 0.6 });
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  // gate: two tall posts with a lantern, two barred leaves
+  for (const s of [-1, 1]) mesh(B(0.3, 2.4, 0.3), wood, s * 2.7, 1.2, -ARENA, scene);
+  mesh(B(5.7, 0.25, 0.3), wood, 0, 2.45, -ARENA, scene);
+  mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd28a }), 0, 2.75, -ARENA, scene);
+  gateLight = new THREE.PointLight(0xffc070, 1.4, 14, 2); gateLight.position.set(0, 2.6, -ARENA + 0.6); scene.add(gateLight);
+  function leaf(side) {
+    const p = pivot(scene, side * 2.55, 0, -ARENA);
+    const dir = -side; // leaf extends toward the middle
+    for (const y of [0.25, 1.75]) mesh(B(2.55, 0.08, 0.08), metal, dir * 1.275, y, 0, p);
+    for (let i = 0; i <= 8; i++) mesh(B(0.04, 1.6, 0.04), metal, dir * (0.1 + i * 0.3), 1.0, 0, p);
+    return p;
+  }
+  gateL = leaf(-1); gateR = leaf(1);
+  // short rails between the forest fence and the gate posts
+  for (const s of [-1, 1]) for (const y of [0.45, 1.0]) mesh(B(1.3, 0.12, 0.05), wood, s * 3.35, y, -ARENA, scene);
+
+  // path ground + dirt strip, extra ground for the north area
+  const north = new THREE.Mesh(new THREE.PlaneGeometry(60, 84), texMat(groundTex, 1, { bumpScale: 0.06 }));
+  north.rotation.x = -Math.PI / 2; north.position.set(0, -0.01, -110); north.receiveShadow = true; scene.add(north);
+  const dirtTex = canvasTex(256, (x, s) => { x.fillStyle = '#4a3a2a'; x.fillRect(0, 0, s, s); speckle(x, 4000, s, ['#5a4632', '#3a2c1e', '#6a5440', '#2e2318'], 2.2); }, 1, 12);
+  const path = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 62), texMat(dirtTex, 1, { bumpScale: 0.05 }));
+  path.rotation.x = -Math.PI / 2; path.position.set(0, 0.02, -70); path.receiveShadow = true; scene.add(path);
+  const concTex = canvasTex(256, (x, s) => { x.fillStyle = '#4c4d4c'; x.fillRect(0, 0, s, s); speckle(x, 3000, s, ['#5a5b5a', '#3c3d3c', '#2f3a2a'], 2); veins(x, s, 14, 'rgba(20,20,20,0.6)', 1.5); }, 4);
+  const plazaM = new THREE.Mesh(new THREE.PlaneGeometry(28, 13), texMat(concTex, 0.95, { bumpScale: 0.04 }));
+  plazaM.rotation.x = -Math.PI / 2; plazaM.position.set(0, 0.025, -105.5); plazaM.receiveShadow = true; scene.add(plazaM);
+
+  // fences along the path and around the plaza
+  const postGeo = B(0.18, 1.5, 0.18), railGeo = B(0.05, 0.1, 3.05);
+  for (const s of [-1, 1]) for (let z = -ARENA; z > -100; z -= 3) {
+    mesh(postGeo, wood, s * 2.7, 0.75, z, scene).rotation.set(rnd(-0.05, 0.05), 0, rnd(-0.05, 0.05));
+    for (const y of [0.45, 1.1]) mesh(railGeo, wood, s * 2.7, y, z - 1.5, scene);
+  }
+  const railX = B(3.05, 0.1, 0.05);
+  for (const s of [-1, 1]) {
+    for (let x = 2.7; x < 14; x += 3) { mesh(postGeo, wood, s * x, 0.75, -100, scene); for (const y of [0.45, 1.1]) mesh(railX, wood, s * (x + 1.5), y, -100, scene); }
+    for (let z = -100; z > -112; z -= 3) { mesh(postGeo, wood, s * 14, 0.75, z, scene); for (const y of [0.45, 1.1]) mesh(railGeo, wood, s * 14, y, z - 1.5, scene); }
+  }
+  // lantern posts along the path
+  const lamp = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+  for (let z = -52; z > -100; z -= 15) {
+    mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.6, 8), metal, 2.4, 1.3, z, scene);
+    mesh(new THREE.SphereGeometry(0.13, 10, 8), lamp, 2.4, 2.65, z, scene);
+  }
+  // trees lining the path (scenery)
+  for (let i = 0; i < 34; i++) {
+    const x = (Math.random() < 0.5 ? -1 : 1) * rnd(5, 28), z = rnd(-46, -140);
+    if (Math.abs(x) < 17 && z < -97) continue;
+    farTrees.push(pine(x, z, rnd(1.1, 1.7)));
+  }
+
+  // the nine-storey block
+  const facadeTex = canvasTex(1024, (x, s) => {
+    x.fillStyle = '#6a6a66'; x.fillRect(0, 0, s, s);
+    speckle(x, 6000, s, ['#5c5c58', '#77776f', '#4a4a46', '#3a3f38'], 3);
+    for (let i = 0; i < 30; i++) { const g = x.createLinearGradient(0, 0, 0, s); const px = Math.random() * s; g.addColorStop(0, 'rgba(30,30,25,0.0)'); g.addColorStop(1, 'rgba(30,30,25,0.35)'); x.fillStyle = g; x.fillRect(px, Math.random() * s, rnd(4, 14), s); }
+    const cols = 6, rows = 9, cw = s / cols, rh = s / rows;
+    for (let r = 0; r < rows; r++) {
+      x.fillStyle = 'rgba(40,40,38,0.5)'; x.fillRect(0, r * rh + rh - 6, s, 4); // floor slab line
+      for (let c = 0; c < cols; c++) {
+        const wx = c * cw + cw * 0.22, wy = r * rh + rh * 0.2, ww = cw * 0.56, wh = rh * 0.55;
+        x.fillStyle = '#2a2a28'; x.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
+        const lit = Math.random() < 0.1;
+        x.fillStyle = lit ? '#d8a860' : ['#0c1016', '#121820', '#0a0d12'][(r + c) % 3]; x.fillRect(wx, wy, ww, wh);
+        x.fillStyle = '#2a2a28'; x.fillRect(wx + ww / 2 - 2, wy, 4, wh); x.fillRect(wx, wy + wh * 0.35, ww, 3);
+      }
+    }
+  });
+  const block = mesh(B(20, 27, 14), mat(0xffffff, 0.95, { map: facadeTex.map, bumpMap: facadeTex.bump, bumpScale: 0.03 }), 0, 13.5, -119, scene);
+  mesh(B(20.4, 0.6, 14.4), mat(0x3a3a38, 0.9), 0, 27.3, -119, scene);
+  mesh(B(4.4, 0.2, 1.8), mat(0x3a3a38, 0.8), 0, 2.8, -111.2, scene);       // entrance canopy
+  mesh(B(2.2, 2.5, 0.1), mat(0x15120f, 0.6, { emissive: 0x0d0a06 }), 0, 1.25, -111.95, scene); // doorway
+  mesh(new THREE.SphereGeometry(0.14, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0 }), 0, 2.6, -111.6, scene);
+  doorLight = new THREE.PointLight(0xfff0c0, 1.1, 10, 2); doorLight.position.set(0, 2.5, -110.8); scene.add(doorLight);
+  brokenDecal = mesh(new THREE.PlaneGeometry(1.25, 1.05), mat(0x050608, 1), 3.5, 7.4, -111.97, scene); brokenDecal.visible = false;
+  boxes.push({ minX: -10, maxX: 10, minZ: -126, maxZ: -112 });
+
+  // big leafy tree right under the 3rd-floor window
+  const tx = 3.5, tz = -108.2;
+  mesh(new THREE.CylinderGeometry(0.3, 0.5, 5, 10), trunkMat, tx, 2.5, tz, scene);
+  for (const [a, h, l] of [[0.6, 3.2, 1.8], [2.4, 3.6, 1.6], [4.2, 3.0, 1.7]]) {
+    const br = pivot(scene, tx, h, tz); br.rotation.set(0, a, 0.9);
+    mesh(new THREE.CylinderGeometry(0.06, 0.16, l, 6), trunkMat, 0, l / 2, 0, br);
+  }
+  const crownM = mat(0x1e3d1e, 0.95, { flatShading: true });
+  for (let i = 0; i < 9; i++) mesh(rough(new THREE.IcosahedronGeometry(rnd(1.1, 1.7), 1), 0.25), crownM, tx + rnd(-1.6, 1.6), rnd(4.6, 6.4), tz + rnd(-1.4, 1.4), scene);
+  trees.push({ x: tx, z: tz, r: 0.55 });
+
+  // the 3rd-floor room behind that window (seen in the cutscene)
+  const paper = canvasTex(256, (x, s) => {
+    x.fillStyle = '#6e7a5e'; x.fillRect(0, 0, s, s);
+    for (let i = 0; i < s; i += 32) { x.fillStyle = 'rgba(40,50,30,0.35)'; x.fillRect(i, 0, 10, s); }
+    speckle(x, 900, s, ['rgba(60,45,30,0.4)', 'rgba(30,30,20,0.4)'], 6);
+  }, 2);
+  const wallM = texMat(paper, 0.95, { side: THREE.DoubleSide, bumpScale: 0.01 });
+  const floorM = texMat(plankTex, 0.9, { bumpScale: 0.03 });
+  mesh(B(6, 0.1, 4.4), floorM, 3.5, 5.95, -114.35, scene);
+  mesh(B(6, 0.1, 4.4), wallM, 3.5, 9.0, -114.35, scene);
+  mesh(B(6, 3, 0.1), wallM, 3.5, 7.5, -116.55, scene);
+  for (const x of [0.5, 6.5]) mesh(B(0.1, 3, 4.4), wallM, x, 7.5, -114.35, scene);
+  for (const [w, h, x, y] of [[2.4, 3, 1.7, 7.5], [2.4, 3, 5.3, 7.5], [1.2, 0.9, 3.5, 6.45], [1.2, 1.1, 3.5, 8.45]]) mesh(B(w, h, 0.1), wallM, x, y, -112.2, scene);
+  roomGlass = mesh(new THREE.PlaneGeometry(1.2, 1.0), mat(0x9fb0c0, 0.1, { transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }), 3.5, 7.4, -112.2, scene);
+  roomGlass.castShadow = false;
+  const bedWood = mat(0x4a3424, 0.8, { map: plankTex.map });
+  mesh(B(1.3, 0.35, 2.1), bedWood, 3.5, 6.2, -115.4, scene);
+  mesh(B(1.3, 1.0, 0.08), bedWood, 3.5, 6.5, -116.45, scene);
+  mesh(B(1.24, 0.18, 2.0), mat(0xd8d2c4, 0.95), 3.5, 6.46, -115.4, scene);
+  mesh(B(1.27, 0.08, 1.35), mat(0x7a3a3a, 0.95), 3.5, 6.58, -115.0, scene);
+  mesh(B(0.75, 0.14, 0.38), mat(0xeeeae0, 0.95), 3.5, 6.62, -116.12, scene);
+  mesh(B(1.3, 2.2, 0.6), mat(0x3a2a1e, 0.8, { map: plankTex.map }), 1.3, 7.1, -116.1, scene);
+  mesh(B(0.5, 0.55, 0.45), bedWood, 4.75, 6.27, -116.1, scene);
+  mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffe0a0 }), 4.75, 6.75, -116.1, scene);
+  const rugR = mesh(new THREE.PlaneGeometry(1.6, 1.0), mat(0x3a4a6a, 1), 3.5, 6.01, -113.6, scene); rugR.rotation.x = -Math.PI / 2;
+  mesh(B(0.7, 0.9, 0.02), mat(0x8a6a4a, 0.8), 5.6, 7.6, -116.48, scene);
+  roomLight = new THREE.PointLight(0xffd8a0, 0, 8, 2); roomLight.position.set(4.2, 7.3, -115.4); scene.add(roomLight);
+}
+
+// ---------- spiders (procedural legs, so both the tiny one and the giant share one model) ----------
+const UP = new THREE.Vector3(0, 1, 0), segDir = new THREE.Vector3(), legK = new THREE.Vector3(), legF = new THREE.Vector3();
+function placeSeg(m, a, b) {
+  m.position.copy(a).add(b).multiplyScalar(0.5);
+  segDir.subVectors(b, a); const l = segDir.length();
+  m.scale.set(1, l, 1); m.quaternion.setFromUnitVectors(UP, segDir.normalize());
+}
+function makeSpider() {
+  const g = new THREE.Group(), body = pivot(g, 0, 0, 0);
+  const hide = mat(0xffffff, 0.55, { map: skinTex.map, bumpMap: skinTex.bump, bumpScale: 0.04 });
+  const legM = mat(0x1a1210, 0.6, { map: saddleTex.map }), band = mat(0x6a2a1a, 0.6);
+  const eyeM = mat(0xff2200, 0.2, { emissive: 0xff1100, emissiveIntensity: 3 });
+  const S = r => new THREE.SphereGeometry(r, 16, 12);
+  mesh(S(0.75), hide, 0, 1.15, -1.0, body).scale.set(1, 0.8, 1.25);              // abdomen
+  for (const [x, z] of [[-0.22, -0.8], [0.22, -0.8], [0, -1.25], [-0.15, -1.6], [0.15, -1.6]]) mesh(S(0.1), mat(0x8a1010, 0.4, { emissive: 0x300000 }), x, 1.73, z, body).scale.set(1, 0.3, 1.3);
+  mesh(S(0.18), hide, 0, 1.0, -0.25, body);                                          // waist
+  mesh(S(0.5), hide, 0, 1.0, 0.25, body).scale.set(1, 0.7, 1.1);                     // head-chest
+  for (const [x, y, z, r] of [[-0.13, 1.22, 0.72, 0.09], [0.13, 1.22, 0.72, 0.09], [-0.3, 1.2, 0.6, 0.06], [0.3, 1.2, 0.6, 0.06], [-0.08, 1.33, 0.62, 0.04], [0.08, 1.33, 0.62, 0.04], [-0.22, 1.31, 0.52, 0.035], [0.22, 1.31, 0.52, 0.035]])
+    mesh(S(r), eyeM, x, y, z, body);
+  for (const s of [-1, 1]) {
+    mesh(S(0.13), hide, s * 0.11, 0.85, 0.72, body);
+    const fang = mesh(new THREE.ConeGeometry(0.045, 0.38, 6), mat(0x1a0a08, 0.3), s * 0.11, 0.62, 0.78, body); fang.rotation.x = Math.PI - 0.35;
+    const palp = mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.5, 6), legM, s * 0.3, 0.75, 0.85, body); palp.rotation.x = 1.0;
+  }
+  const legs = [], femurG = new THREE.CylinderGeometry(0.07, 0.06, 1, 8), tibiaG = new THREE.CylinderGeometry(0.055, 0.02, 1, 8);
+  for (const s of [-1, 1]) for (let i = 0; i < 4; i++) {
+    const H = new THREE.Vector3(s * 0.38, 1.0, 0.5 - i * 0.22);
+    const F0 = new THREE.Vector3(s * (1.8 + (i === 1 || i === 2 ? 0.35 : 0)), 0, [1.7, 0.6, -0.6, -1.7][i]);
+    const femur = mesh(femurG, legM, 0, 0, 0, g), tibia = mesh(tibiaG, legM, 0, 0, 0, g), knee = mesh(S(0.08), band, 0, 0, 0, g);
+    legs.push({ s, i, H, F0, femur, tibia, knee });
+  }
+  const sp = { g, body, legs, eyeM, phase: 0 };
+  poseSpider(sp, 0, 0, 0);
+  return sp;
+}
+function poseSpider(sp, phase, amp, crouch) {
+  for (const l of sp.legs) {
+    const p = phase + (((l.i + (l.s > 0 ? 1 : 0)) % 2) ? Math.PI : 0);
+    legF.copy(l.F0); legF.y += Math.max(0, Math.sin(p)) * 0.35 * amp; legF.z += Math.cos(p) * 0.45 * amp;
+    legK.copy(l.H).lerp(legF, 0.4); legK.x += l.s * 0.35; legK.y += 1.0 - crouch * 0.6;
+    placeSeg(l.femur, l.H, legK); placeSeg(l.tibia, legK, legF); l.knee.position.copy(legK);
+  }
+  sp.body.position.y = -crouch * 0.45 + Math.abs(Math.sin(phase * 2)) * 0.05 * amp;
+}
 
 // sky: stars, moon with halo, drifting ground mist
 {
@@ -918,7 +1108,7 @@ function updateDog(dt, t) {
       let dy = Math.atan2(mx, mz) - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       g.rotation.y += dy * Math.min(1, dt * 3);
     }
-    pushOut(g.position, 0.25);
+    pushOut(g.position, 0.25, playerZones());
     g.position.y = 0; g.rotation.x = 0; g.rotation.z = 0;
     animateDog(dt, speed > 0.5 ? Math.min(speed, 8) : 0, t);
     const md = Math.hypot(monster.position.x - g.position.x, monster.position.z - g.position.z);
@@ -995,6 +1185,9 @@ const overEl = document.getElementById('over'), startEl = document.getElementByI
 const resultEl = document.getElementById('result'), vig = document.getElementById('vig');
 
 function reset() {
+  stage = 'forest'; gateTarget = 0; gateK = 0; monsterIdle = false; scareBy = 'monster';
+  spider.active = false; spider.g.visible = false; spider.stun = 0; spider.g.rotation.set(0, 0, 0); spider.g.position.set(0, 0, -111.6);
+  tower.on = false; roomLight.intensity = 0; roomGlass.visible = true; brokenDecal.visible = false; spiderSmall.g.visible = false;
   hidden = false; hideT = 0; hidesLeft = HIDE_COUNT; hideBush = null; leavesEl.hidden = true;
   me.x = 0; me.z = 0; me.yaw = 0; me.pitch = 0;
   // monster appears somewhere far away, not in front of you
@@ -1011,7 +1204,7 @@ function reset() {
   for (const h of hearts) { h.visible = false; h.userData.t = 99; }
   toastEl.hidden = true; toastT = 0;
 }
-function pushOut(p, r) {
+function pushOut(p, r, zones = ZONES_FOREST) {
   for (const t of trees) {
     const dx = p.x - t.x, dz = p.z - t.z, d = Math.hypot(dx, dz), min = t.r + r;
     if (d < min && d > 0) { p.x = t.x + dx / d * min; p.z = t.z + dz / d * min; }
@@ -1024,9 +1217,7 @@ function pushOut(p, r) {
       else { p.z = b.maxZ + r; } // inside: pop out the front
     }
   }
-  const lim = ARENA - r;
-  p.x = Math.max(-lim, Math.min(lim, p.x));
-  p.z = Math.max(-lim, Math.min(lim, p.z));
+  clampZones(p, r, zones);
 }
 function reload() {
   if (reloading || ammo === MAX_AMMO || over || !started) return;
@@ -1039,7 +1230,11 @@ function shoot() {
   noiseBurst(0.25, 1.2, 1800);
   ray.setFromCamera(center, camera);
   const hit = ray.intersectObject(hitbox)[0];
-  if (hit && hit.distance < 40) {
+  const sHit = spider.active ? ray.intersectObject(spider.hitbox)[0] : null;
+  if (sHit && sHit.distance < 40 && (!hit || sHit.distance < hit.distance)) {
+    hits++; spider.flash = 1;
+    if (spider.stun <= 0) { spider.stun = STUN_TIME; shriek(); }
+  } else if (hit && hit.distance < 40 && !monsterIdle) {
     hits++;
     hitFlash = 1;
     if (stun <= 0) { stun = STUN_TIME; shriek(); } // a stunned monster can't be stunned longer
@@ -1122,7 +1317,7 @@ addEventListener('keydown', e => {
   initAudio();
   if (paused) return;
   const k = e.key.toLowerCase();
-  if (cut.on) { if (k === ' ' || k === 'enter' || k === 'escape') { e.preventDefault(); endCutscene(); } return; }
+  if (cut.on || tower.on) { if (k === ' ' || k === 'enter' || k === 'escape') { e.preventDefault(); cut.on ? endCutscene() : endTower(); } return; }
   if (k.startsWith('arrow') || k === ' ') e.preventDefault();
   keys[k] = true;
   if (over && k === 'enter') { reset(); lockMouse(); }
@@ -1167,6 +1362,16 @@ function update(dt) {
   if (over) {
     // JUMPSCARE: the face lunges right into the camera, screaming
     scareT += dt;
+    if (scareBy === 'spider') {
+      spiderScare(dt);
+      me.pitch += (0 - me.pitch) * Math.min(1, dt * 20);
+      camera.fov += (40 - camera.fov) * Math.min(1, dt * 12); camera.updateProjectionMatrix();
+      shake = Math.max(0, 1 - scareT / 1.8) * 0.07;
+      scareEl.style.background = scareT < 0.07 ? '#fff' : '#b00000';
+      scareEl.style.opacity = scareT < 0.07 ? 1 : (scareT < 1.2 && Math.sin(scareT * 70) > 0.7 ? 0.25 : 0);
+      if (scareT > 1.9 && overEl.hidden) { overEl.hidden = false; shake = 0; scareEl.style.opacity = 0; try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {} }
+      return;
+    }
     const fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw);
     // place the body so the snout lands right in front of the eyes, lunging closer
     const dist = Math.max(1.0, 2.4 - scareT * 7);
@@ -1196,6 +1401,8 @@ function update(dt) {
     return;
   }
   time += dt;
+  updateStage(dt);
+  if (tower.on) return;
   let f = 0, s = 0;
   if (keys['w'] || keys['ц'] || keys['arrowup']) f++;
   if (keys['s'] || keys['ы'] || keys['arrowdown']) f--;
@@ -1217,7 +1424,7 @@ function update(dt) {
   const sin = Math.sin(me.yaw), cos = Math.cos(me.yaw);
   me.x += (-sin * f + cos * s) * speed * dt;
   me.z += (-cos * f - sin * s) * speed * dt;
-  pushOut(me, 0.35);
+  pushOut(me, 0.35, playerZones());
   bob = moving ? bob + dt * (sprint ? 14 : 9) : bob * 0.9;
 
   const mSpeed = 3.6 + time * 0.12;
@@ -1241,7 +1448,7 @@ function update(dt) {
     monster.position.y = 0;
     beast.eyeM.emissiveIntensity = 0.4; beast.eyeGlow.intensity = 0.3;
   } else {
-    if (hidden) {
+    if (hidden || monsterIdle) {
       // it can't see you: prowl around where you vanished
       let wx = wander.x - monster.position.x, wz = wander.z - monster.position.z, wd = Math.hypot(wx, wz);
       if (wd < 1) {
@@ -1271,7 +1478,8 @@ function update(dt) {
   hitFlash = Math.max(0, hitFlash - dt * 4);
   for (const m of beast.skin) m.emissive.setRGB(hitFlash * 0.7, 0, 0);
 
-  const fear = Math.max(0, Math.min(1, 1 - (d - 2) / 16));
+  const sd = updateSpider(dt);
+  const fear = Math.max(0, Math.min(1, 1 - (Math.min(monsterIdle ? 99 : d, sd) - 2) / 16));
   vig.style.opacity = (fear * 0.9).toFixed(2);
   if (actx && soundOn && actx.currentTime >= nextBeat) {
     const t = actx.currentTime, gap = 1.1 - fear * 0.75, vol = 0.15 + fear * 0.6;
@@ -1281,6 +1489,8 @@ function update(dt) {
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
   updateHiding(dt);
   if (hidden) { /* safe while hidden */ }
+  else if (spider.active && sd < 1.9 && spider.stun <= 0) spiderCatch();
+  else if (monsterIdle) { /* far away in the forest */ }
   else if (d < 1.5 && stun <= 0 && dog.state === 'follow') dogSave();
   else if (d < 1.5 && stun <= 0) {
     over = true; best = Math.max(best, time); hideBtn.hidden = true; leavesEl.hidden = true;
@@ -1292,7 +1502,7 @@ function update(dt) {
   stamEl.style.width = (stamina * 100).toFixed(0) + '%';
   if (reloading) { reloading = Math.max(0, reloading - dt); if (!reloading) ammo = MAX_AMMO; }
   ammoEl.textContent = reloading ? 'Перезарядка…' : 'Патроны ' + ammo + '/' + MAX_AMMO;
-  stunEl.textContent = stun > 0 ? 'Монстр заморожен ' + stun.toFixed(1) + ' с' : '';
+  stunEl.textContent = stun > 0 && !monsterIdle ? 'Монстр заморожен ' + stun.toFixed(1) + ' с' : (spider.active && spider.stun > 0 ? 'Паук заморожен ' + spider.stun.toFixed(1) + ' с' : '');
 }
 
 // chase with simple obstacle avoidance: when blocked (cabin wall, big rock), walk sideways
@@ -1308,7 +1518,7 @@ function moveMonster(mx, mz, d, speed, dt) {
     const l = Math.hypot(dx, dz); dx /= l; dz /= l;
   }
   p.x += dx * speed * dt; p.z += dz * speed * dt;
-  pushOut(p, 0.9);
+  pushOut(p, 0.9, monsterZones());
   const moved = Math.hypot(p.x - x0, p.z - z0);
   if (moved < speed * dt * 0.35) {
     if (nav.detour <= 0) nav.side = Math.random() < 0.5 ? 1 : -1;
@@ -1323,7 +1533,7 @@ function respawnMonster(dist) {
   // somewhere behind you, out of sight
   const a = me.yaw + (Math.random() - 0.5) * 1.2;
   monster.position.set(me.x + Math.sin(a) * dist, 0, me.z + Math.cos(a) * dist);
-  pushOut(monster.position, 0.9);
+  pushOut(monster.position, 0.9, monsterZones());
   nav.detour = 0; nav.best = Infinity; nav.since = 0;
 }
 function animateLimbs(rig, phase, amp, kneeBend, armBase, elbowBase) {
@@ -1391,7 +1601,7 @@ function endCutscene() {
   dog.g.position.copy(L(-0.1, 0, 11.5)); dog.g.rotation.set(0, 0, 0);
   if (!matchMedia('(pointer: coarse)').matches) toast('Кликни по экрану, чтобы управлять мышью. Беги!', 3);
 }
-for (const ev of ['click', 'pointerdown']) document.getElementById('skip').addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); endCutscene(); });
+for (const ev of ['click', 'pointerdown']) document.getElementById('skip').addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); cut.on ? endCutscene() : endTower(); });
 
 function runActor(dt, speed, phase) {
   animateLimbs(actor, phase, 0.75, 0.15, 0, -1.3);
@@ -1476,6 +1686,197 @@ function updateCutscene(dt, now) {
   } else endCutscene();
 }
 
+
+// ---------- story stages: forest (60 s) -> gate -> path -> tower cutscene -> escape -> two monsters ----------
+const GATE_TIME = 60;
+const spider = makeSpider(); spider.g.visible = false; scene.add(spider.g);
+spider.hitbox = new THREE.Mesh(new THREE.BoxGeometry(3, 1.5, 3.4), new THREE.MeshBasicMaterial());
+spider.hitbox.position.set(0, 1.0, -0.3); spider.hitbox.visible = false; spider.g.add(spider.hitbox);
+spider.active = false; spider.stun = 0; spider.t = 0; spider.flash = 0; spider.wx = 0; spider.wz = 0;
+const spiderSmall = makeSpider(); spiderSmall.g.scale.setScalar(0.09); spiderSmall.g.visible = false; scene.add(spiderSmall.g);
+let stage = 'forest', gateTarget = 0, gateK = 0, monsterIdle = false, scareBy = 'monster';
+const goalEl = document.getElementById('goal'), goalText = document.getElementById('goal-text'), goalArrow = document.getElementById('goal-arrow');
+
+function playerZones() {
+  if (stage === 'path') return [ZONE.pathOnly, ZONE.plaza];
+  return gateTarget ? ZONES_ALL : ZONES_FOREST;
+}
+function monsterZones() { return stage === 'final' ? ZONES_ALL : ZONES_FOREST; }
+function setGoal(text, tx, tz) {
+  goalText.textContent = text;
+  if (tx === undefined) { goalArrow.hidden = true; return; }
+  const dx = tx - me.x, dz = tz - me.z, fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw), rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw);
+  goalArrow.hidden = false; goalArrow.style.transform = 'rotate(' + Math.atan2(dx * rx + dz * rz, dx * fx + dz * fz) + 'rad)';
+}
+function creak() { noiseBurst(0.8, 0.5, 300); }
+function updateStage(dt) {
+  gateK += (gateTarget - gateK) * Math.min(1, dt * 2);
+  gateL.rotation.y = gateK * 1.5; gateR.rotation.y = -gateK * 1.5;
+  if (stage === 'forest') {
+    if (time >= GATE_TIME && !gateTarget) { gateTarget = 1; creak(); toast('Ворота на севере открылись! Беги к ним!', 4); }
+    if (!gateTarget) setGoal('Продержись: ' + Math.ceil(GATE_TIME - time) + ' с');
+    else setGoal('Беги к воротам', 0, -ARENA);
+    if (me.z < -ARENA - 0.8) {
+      stage = 'path'; gateTarget = 0; creak(); monsterIdle = true; stun = 0;
+      monster.position.set(rnd(-30, 30), 0, rnd(5, 30)); pickWander(monster.position.x, monster.position.z);
+      toast('Ворота захлопнулись за тобой. Иди по тропинке.', 4);
+    }
+  } else if (stage === 'path') {
+    setGoal('Иди по тропинке к дому', 0, -111);
+    if (Math.hypot(me.x, me.z + 111.2) < 2.4) startTower();
+  } else if (stage === 'escape') {
+    setGoal('Беги обратно в лес!', 0, -ARENA + 4);
+    if (me.z > -ARENA + 1) {
+      stage = 'final'; monsterIdle = false; nav.detour = 0; nav.best = Infinity; nav.since = 0;
+      const side = me.x > 0 ? -1 : 1;
+      monster.position.set(side * rnd(12, 20), 0, rnd(-10, 10)); pushOut(monster.position, 0.9, monsterZones());
+      toast('Теперь за тобой гонятся ДВА монстра!', 4);
+    }
+  } else if (stage === 'final') setGoal('Выживай! Монстров: 2');
+}
+
+function updateSpider(dt) {
+  const sp = spider, g = sp.g;
+  if (!sp.active) return 99;
+  sp.t += dt;
+  const dx = me.x - g.position.x, dz = me.z - g.position.z, d = Math.hypot(dx, dz);
+  if (sp.stun > 0) {
+    sp.stun = Math.max(0, sp.stun - dt);
+    poseSpider(sp, sp.phase + Math.sin(time * 30) * 0.05, 0.1, 0.7);
+    sp.eyeM.emissiveIntensity = 0.4;
+  } else {
+    const speed = 3.5 + sp.t * 0.06;
+    let tx = dx, tz = dz, td = d;
+    if (hidden) { // can't see you either: skitters around nearby
+      let wx = sp.wx - g.position.x, wz = sp.wz - g.position.z;
+      if (Math.hypot(wx, wz) < 1) { sp.wx = g.position.x + rnd(-7, 7); sp.wz = g.position.z + rnd(-7, 7); wx = sp.wx - g.position.x; wz = sp.wz - g.position.z; }
+      tx = wx; tz = wz; td = Math.hypot(wx, wz) || 1;
+    }
+    const k = (hidden ? 0.5 : 1) * speed * dt / (td || 1);
+    g.position.x += tx * k; g.position.z += tz * k;
+    pushOut(g.position, 1.1, ZONES_ALL);
+    if (hidden && hideBush) { const bx = g.position.x - hideBush.x, bz = g.position.z - hideBush.z, bd = Math.hypot(bx, bz) || 1; if (bd < 3.5) { g.position.x = hideBush.x + bx / bd * 3.5; g.position.z = hideBush.z + bz / bd * 3.5; } }
+    g.rotation.y = Math.atan2(tx, tz);
+    sp.phase += dt * speed * 2.4;
+    poseSpider(sp, sp.phase, 1, 0);
+    sp.eyeM.emissiveIntensity = 3;
+  }
+  sp.flash = Math.max(0, sp.flash - dt * 4);
+  return d;
+}
+function spiderCatch() {
+  over = true; scareBy = 'spider'; best = Math.max(best, time); hideBtn.hidden = true; leavesEl.hidden = true;
+  resultEl.textContent = 'Паук поймал тебя. Ты продержался ' + time.toFixed(1) + ' с, попаданий: ' + hits;
+  vig.style.opacity = 1; scareT = 0; scream();
+}
+const spFace = new THREE.Vector3();
+function spiderScare(dt) {
+  const fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw), g = spider.g;
+  const dist = Math.max(1.3, 3 - scareT * 8);
+  g.rotation.set(-0.45, Math.atan2(-fx, -fz), 0);
+  g.position.set(me.x + fx * 4, 0, me.z + fz * 4); g.updateMatrixWorld(true);
+  const face = spider.body.localToWorld(spFace.set(0, 1.0, 0.75));
+  g.position.x += me.x + fx * dist - face.x; g.position.y += 1.55 - face.y; g.position.z += me.z + fz * dist - face.z;
+  poseSpider(spider, scareT * 25, 1.6, 0);
+  spider.eyeM.emissiveIntensity = 7;
+}
+
+// ---------- tower cutscene ----------
+const tower = { on: false, t: 0, flags: {} };
+const camP = new THREE.Vector3(), camT = new THREE.Vector3();
+function startTower() {
+  tower.on = true; tower.t = 0; tower.flags = {};
+  if (hidden) leaveBush(false);
+  document.body.classList.add('cine'); cineEl.hidden = false; subEl.textContent = '';
+  hideBtn.hidden = true; toastEl.hidden = true; gun.visible = false; flash.intensity = 0;
+  fadeEl.style.transition = 'none'; fadeEl.style.opacity = 1;
+  roomLight.intensity = 1.5; roomGlass.visible = true; brokenDecal.visible = false;
+  spiderSmall.g.visible = true; spiderSmall.g.position.set(3.5, 6.45, -116.36); // hidden under the pillow spiderSmall.g.rotation.set(0, 0, 0);
+  dog.g.visible = false;
+  spider.g.visible = false; spider.g.position.set(0, 0, -111.6);
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+}
+function endTower() {
+  if (!tower.on) return;
+  tower.on = false; cineEl.hidden = true; document.body.classList.remove('cine');
+  fadeEl.style.transition = ''; fadeEl.style.opacity = 0; leavesEl.hidden = true;
+  roomLight.intensity = 0; roomGlass.visible = false; brokenDecal.visible = true; spiderSmall.g.visible = false;
+  gun.visible = true; flash.intensity = 3.2; camera.fov = 55; camera.updateProjectionMatrix();
+  stage = 'escape'; gateTarget = 1;
+  me.x = 2.4; me.z = -104.8; me.yaw = Math.PI; me.pitch = 0;
+  spider.active = true; spider.stun = 0; spider.t = 0; spider.g.visible = true;
+  spider.g.position.set(-1, 0, -110.8); spider.g.rotation.set(0, 0, 0);
+  if (dog.state !== 'gone') { dog.state = 'follow'; dog.g.visible = true; dog.g.position.set(4.2, 0, -103.5); }
+  toast('Беги! Паук гонится за тобой!', 3);
+  lastT = performance.now();
+}
+function updateTower(dt, now) {
+  const t = (tower.t += dt);
+  const pillow = camT.set(3.5, 6.7, -116.1);
+  if (t < 1.4) {
+    subEl.textContent = 'Ты поднимаешься на третий этаж…';
+    camera.position.set(3.5, 7.65, -112.8); camera.lookAt(3.5, 7.0, -116);
+    fadeEl.style.opacity = t < 1.0 ? 1 : 1 - (t - 1.0) / 0.4;
+  } else if (t < 5) {
+    fadeEl.style.opacity = 0;
+    subEl.textContent = 'Наконец-то кровать… Можно прилечь.';
+    const k = ease(clamp01((t - 1.4) / 3.2));
+    camera.position.set(3.5, 7.65 - 0.45 * k + Math.sin(t * 6) * 0.015 * (1 - k), -112.8 - 1.5 * k);
+    camera.lookAt(3.5, 6.9 - 0.15 * k, -116.1);
+  } else if (t < 7) {
+    // the spider crawls out from under the pillow
+    const k = ease(clamp01((t - 5) / 1.4));
+    spiderSmall.g.position.set(3.5, 6.45 + 0.27 * k, -116.36 + 0.66 * k);
+    spiderSmall.phase += dt * 14; poseSpider(spiderSmall, spiderSmall.phase, k < 1 ? 1 : 0.2, 0);
+    if (t > 5.7) { once('spider', () => { shriek(); noiseBurst(0.2, 0.6, 5000); }); subEl.textContent = 'ПАУК!!!'; }
+    else subEl.textContent = '…';
+    camera.position.set(3.5 + (Math.random() - 0.5) * 0.01, 7.2, -114.3);
+    camera.lookAt(spiderSmall.g.position);
+    camera.fov += ((t > 5.7 ? 40 : 55) - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix();
+  } else if (t < 8.1) {
+    // stumble backwards into the window
+    subEl.textContent = '';
+    camera.fov = 55; camera.updateProjectionMatrix();
+    const k = ease(clamp01((t - 7) / 1.0));
+    camera.position.set(3.5, 7.2 + 0.2 * k, -114.3 + 2.0 * k);
+    camera.lookAt(3.5, 6.8 + 2.5 * k, -116.1);
+    if (t > 7.85) once('glass', () => { roomGlass.visible = false; noiseBurst(0.5, 1.0, 7000); });
+  } else if (t < 9.6) {
+    // falling out of the window, tumbling, onto the tree
+    subEl.textContent = '';
+    const k = clamp01((t - 8.1) / 1.5);
+    camera.position.set(3.5 + 0.6 * k, 7.4 + Math.sin(k * Math.PI) * 0.5 - 2.2 * k * k, -112.0 + 3.6 * k);
+    const a = k * 5.5;
+    camera.lookAt(camera.position.x, camera.position.y + Math.cos(a) * 2, camera.position.z - Math.sin(a) * 2);
+    brokenDecal.visible = true;
+    if (t > 9.2) once('crash', () => { drawLeaves(); leavesEl.hidden = false; noiseBurst(0.6, 0.9, 1200); noiseBurst(0.3, 0.8, 300); });
+  } else if (t < 11) {
+    // sliding down through the branches
+    subEl.textContent = 'Ты упал прямо на дерево…';
+    const k = ease(clamp01((t - 9.6) / 1.4));
+    camera.position.set(4.6, 5.0 - 3.35 * k, -107.0 + 0.2 * k);
+    camera.lookAt(3.5 + 2 * k, 4 - 2.5 * k, -110 + 6 * k);
+    if (t > 10.3) leavesEl.hidden = true;
+    if (t > 10.9) once('thud', () => noiseBurst(0.3, 0.9, 250));
+  } else if (t < 14.2) {
+    // the giant spider comes out of the building
+    subEl.textContent = t > 12.2 ? 'Монстр-паук!!!' : '';
+    leavesEl.hidden = true;
+    spider.g.visible = true;
+    const k = ease(clamp01((t - 11.2) / 1.6));
+    spider.g.position.set(-0.5 + 0.8 * k, 0, -111.6 + 2.2 * k);
+    spider.g.rotation.set(t > 12.6 ? -0.35 * ease(clamp01((t - 12.6) / 0.4)) : 0, Math.atan2(2.4 - spider.g.position.x, -104.8 - spider.g.position.z), 0);
+    spider.phase += dt * (k < 1 ? 9 : 2); poseSpider(spider, spider.phase, k < 1 ? 1 : 0.3, 0);
+    if (t > 12.6) once('hiss', () => { shriek(); noiseBurst(0.7, 0.6, 3000); });
+    const look = ease(clamp01((t - 11) / 1.2));
+    const st = ease(clamp01((t - 11) / 0.8)); // get up and step away from the trunk
+    camera.position.set(4.4 - 2.0 * st, 1.65, -107.0 + 2.2 * st);
+    camera.lookAt(camera.position.x + (spider.g.position.x - camera.position.x) * look, 1.6 - 0.6 * (1 - look), -103 + (spider.g.position.z + 103) * look);
+  } else if (t < 15) {
+    subEl.textContent = 'Беги обратно по тропинке!';
+  } else endTower();
+}
+
 // ---------- graphics settings ----------
 const PRESETS = {
   low:    { res: 50,  shadows: 'off',   grass: 'off',  mist: false, far: false },
@@ -1552,11 +1953,11 @@ addEventListener('resize', resize);
 let lastT = performance.now();
 function loop(now) {
   const dt = Math.min((now - lastT) / 1000, 0.05); lastT = now;
-  if (cut.on) updateCutscene(dt, now); else if (!paused) update(dt);
+  if (cut.on) updateCutscene(dt, now); else if (tower.on) updateTower(dt, now); else if (!paused) update(dt);
   animateWorld(now / 1000);
   fpsFrames++;
   if (now - fpsT > 500) { fpsEl.textContent = 'FPS ' + Math.round(fpsFrames * 1000 / (now - fpsT)); fpsFrames = 0; fpsT = now; }
-  if (!cut.on) {
+  if (!cut.on && !tower.on) {
     camera.position.set(me.x, (hidden ? 0.85 : EYE) + Math.sin(bob) * 0.05, me.z);
     camera.rotation.set(me.pitch + (Math.random() - 0.5) * shake, me.yaw + (Math.random() - 0.5) * shake, Math.sin(bob * 0.5) * 0.012 + (Math.random() - 0.5) * shake);
   }
