@@ -93,6 +93,7 @@
 <div class="over" id="start">
   <div class="card">
     <h2>Ночной лес</h2>
+    <p class="papa">Матвей, это папа! Я очень тобой горжусь и люблю тебя. Удачи в игре — ты справишься! ❤</p>
     <p>Где-то в темноте бродит монстр. У тебя фонарик и пистолет на 6 патронов: попадание остановит монстра на 3 секунды. Слушай сердце: чем ближе он, тем чаще оно стучит.</p>
     <p>С тобой храбрая чихуахуа. Она бежит впереди, тявкает, когда монстр рядом, и один раз спасёт тебя: запрыгнет ему на голову и сделает массаж.</p>
     <p><strong>Осторожно:</strong> если он поймает, будет громкий скример.</p>
@@ -1445,6 +1446,7 @@ const overEl = document.getElementById('over'), startEl = document.getElementByI
 const resultEl = document.getElementById('result'), vig = document.getElementById('vig');
 
 function reset() {
+  papaNext = 0;
   boy.found = false; boy.g.visible = true; boy.g.scale.setScalar(0.62); epi.on = false; setSky('night');
   for (const w of cobwebs) w.visible = false; tent.scale.setScalar(0.001); campLight.intensity = 0; campFlame.visible = false;
   exMan.g.visible = false; flask.visible = false; actor.g.visible = false; monster.visible = true; spider.g.scale.setScalar(1);
@@ -2012,7 +2014,14 @@ function setGoal(text, tx, tz) {
   goalArrow.hidden = false; goalArrow.style.transform = 'rotate(' + Math.atan2(dx * rx + dz * rz, dx * fx + dz * fz) + 'rad)';
 }
 function creak() { noiseBurst(0.8, 0.5, 300); }
+const PAPA_NOTES = [
+  [20, 'Папа: «Матвей, ты молодец! Я тобой горжусь» ❤'],
+  [45, 'Папа: «Не бойся монстра — ты сильный!»'],
+  [90, 'Папа: «Люблю тебя, сынок. Скоро увидимся!» ❤'],
+];
+let papaNext = 0;
 function updateStage(dt) {
+  if (papaNext < PAPA_NOTES.length && time >= PAPA_NOTES[papaNext][0] && toastT <= 0) { toast(PAPA_NOTES[papaNext][1], 4); papaNext++; }
   gateK += (gateTarget - gateK) * Math.min(1, dt * 2);
   gateL.rotation.y = gateK * 1.5; gateR.rotation.y = -gateK * 1.5;
   if (stage === 'forest') {
