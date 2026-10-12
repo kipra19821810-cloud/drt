@@ -121,6 +121,13 @@
     <button id="set-close" type="button">Готово</button>
   </div>
 </div>
+<div class="over" id="gl-lost" hidden style="z-index: 9">
+  <div class="card">
+    <h2>Графика сбросилась</h2>
+    <p>Устройству не хватило ресурсов видеокарты. Перезапусти игру — она включится на низком качестве.</p>
+    <button id="gl-restart" type="button">Перезапустить</button>
+  </div>
+</div>
 <div class="over" id="win" hidden>
   <div class="card">
     <h2 class="win-title">Победа!</h2>
@@ -140,7 +147,8 @@
 <script>
 const ARENA = 40;
 const root = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const TOUCH = matchMedia('(pointer: coarse)').matches; // phones and tablets get a lighter setup
+const renderer = new THREE.WebGLRenderer({ antialias: !TOUCH, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -156,7 +164,7 @@ scene.add(new THREE.HemisphereLight(0x5a6f99, 0x0a120c, 0.28));
 const moon = new THREE.DirectionalLight(0x8fa4d0, 0.3);
 moon.position.set(15, 30, 10);
 moon.castShadow = true;
-moon.shadow.mapSize.set(2048, 2048);
+moon.shadow.mapSize.set(TOUCH ? 1024 : 2048, TOUCH ? 1024 : 2048);
 Object.assign(moon.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, far: 100 });
 scene.add(moon);
 
@@ -302,7 +310,7 @@ const trees = [], boxes = [];
   const stone = texMat(stoneTex, 0.9, { flatShading: true });
   for (let i = 0; i < 70; i++) {
     const x = rnd(-ARENA + 2, ARENA - 2), z = rnd(-ARENA + 2, ARENA - 2), s = rnd(0.15, 0.9);
-    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6 || Math.hypot(x, z - ARENA) < 7) continue;
+    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6 || Math.hypot(x, z - ARENA) < 7 || (Math.abs(x - 18) < 4.5 && Math.abs(z + 15) < 4)) continue; // not on the gates or inside the cabin
     const r = mesh(rough(new THREE.DodecahedronGeometry(1, 1), 0.35), stone, x, s * 0.3, z, scene);
     r.scale.set(s * rnd(0.8, 1.4), s * rnd(0.5, 0.9), s * rnd(0.8, 1.4)); r.rotation.y = Math.random() * 6;
     if (s > 0.5) trees.push({ x, z, r: s });
@@ -315,7 +323,7 @@ const bushes = [];
   const leaf = mat(0x1f3a1c, 0.95, { flatShading: true });
   for (let i = 0; i < 45; i++) {
     const x = rnd(-ARENA + 2, ARENA - 2), z = rnd(-ARENA + 2, ARENA - 2);
-    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6 || Math.hypot(x, z - ARENA) < 7) continue;
+    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6 || Math.hypot(x, z - ARENA) < 7 || (Math.abs(x - 18) < 4.5 && Math.abs(z + 15) < 4)) continue; // not on the gates or inside the cabin
     const g = pivot(scene, x, 0, z); bushes.push({ x, z, g });
     for (let k = 0; k < 5; k++) { const b = mesh(rough(new THREE.IcosahedronGeometry(rnd(0.35, 0.6), 1), 0.3), leaf, rnd(-0.5, 0.5), rnd(0.25, 0.6), rnd(-0.5, 0.5), g); b.scale.y = 0.8; }
   }
@@ -2448,10 +2456,10 @@ const ui = {
   mist: document.getElementById('set-mist'), far: document.getElementById('set-far'), fps: document.getElementById('set-fps'),
 };
 let settings, paused = false;
-try { settings = JSON.parse(localStorage.getItem('mc-settings')); } catch (e) {}
+try { settings = JSON.parse(localStorage.getItem('mc-settings-v2')); } catch (e) {}
 if (!settings || !settings.res) {
   const phone = matchMedia('(pointer: coarse)').matches;
-  settings = { preset: phone ? 'medium' : 'high', ...PRESETS[phone ? 'medium' : 'high'], fps: false };
+  settings = { preset: phone ? 'low' : 'high', ...PRESETS[phone ? 'low' : 'high'], fps: false };
 }
 function applySettings() {
   const st = settings;
@@ -2475,7 +2483,7 @@ function applySettings() {
   ui.mist.checked = st.mist; ui.far.checked = st.far; ui.fps.checked = st.fps;
   for (const k of Object.keys(PRESETS)) document.getElementById('q-' + k).setAttribute('aria-pressed', String(st.preset === k));
   document.getElementById('preset-label').textContent = 'Качество графики' + (st.preset === 'custom' ? ': своё' : '');
-  try { localStorage.setItem('mc-settings', JSON.stringify(st)); } catch (e) {}
+  try { localStorage.setItem('mc-settings-v2', JSON.stringify(st)); } catch (e) {}
 }
 for (const k of Object.keys(PRESETS)) document.getElementById('q-' + k).addEventListener('click', () => {
   settings = { ...settings, ...PRESETS[k], preset: k }; applySettings();
@@ -2524,9 +2532,42 @@ function loop(now) {
   const dip = reloading ? Math.sin((1 - reloading / RELOAD_TIME) * Math.PI) : 0;
   gun.position.set(GUN_POS.x, GUN_POS.y - dip * 0.15 + Math.sin(bob) * 0.008, GUN_POS.z + recoil * 0.07);
   gun.rotation.set(recoil * 0.3 - dip * 0.9, 0, dip * 0.4);
+  updateLightSlots();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
+// ---------- light budget: many lamps in the world, but only 4 real point lights ----------
+// every lamp stays in place as an invisible "proxy"; each frame the 4 real lights jump to the
+// nearest lit proxies. The light count never changes, so shaders never recompile, and mobile GPUs cope.
+const lampProxies = [];
+scene.traverse(o => { if (o.isPointLight && o !== beast.eyeGlow && o !== muzzleLight) lampProxies.push(o); });
+for (const l of lampProxies) l.visible = false;
+const lightSlots = Array.from({ length: 4 }, () => { const l = new THREE.PointLight(0xffffff, 0, 10, 2); scene.add(l); return l; });
+const lpPos = new THREE.Vector3();
+function updateLightSlots() {
+  const cam = camera.position, cand = [];
+  for (const l of lampProxies) {
+    if (l.intensity <= 0.01 || (l.parent && !l.parent.visible)) continue;
+    l.getWorldPosition(lpPos);
+    const d = lpPos.distanceTo(cam);
+    if (d < l.distance + 25) cand.push({ l, d, x: lpPos.x, y: lpPos.y, z: lpPos.z });
+  }
+  cand.sort((a, b) => a.d - b.d);
+  lightSlots.forEach((slot, i) => {
+    const c = cand[i];
+    if (!c) { slot.intensity = 0; return; }
+    slot.position.set(c.x, c.y, c.z); slot.color.copy(c.l.color);
+    slot.intensity = c.l.intensity; slot.distance = c.l.distance; slot.decay = c.l.decay;
+  });
+}
+// if the device's GPU gives up, offer a restart on low quality instead of a dead screen
+renderer.domElement.addEventListener('webglcontextlost', e => {
+  e.preventDefault();
+  try { localStorage.setItem('mc-settings-v2', JSON.stringify({ ...settings, ...PRESETS.low, preset: 'low' })); } catch (err) {}
+  document.getElementById('gl-lost').hidden = false;
+});
+document.getElementById('gl-restart').addEventListener('click', () => location.reload());
+
 reset(); applySettings();
 requestAnimationFrame(loop);
 </script>
