@@ -33,7 +33,7 @@
   .fire:active { transform: scale(0.94); }
   .stunned { color: var(--player); }
   .scare { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: #fff; opacity: 0; }
-  .toast { position: fixed; z-index: 2; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 56px); transform: translateX(-50%); max-width: calc(100% - 32px); background: var(--panel); padding: 8px 14px; border-radius: 8px; font-weight: 600; text-align: center; pointer-events: none; }
+  .toast { position: fixed; z-index: 2; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 84px); transform: translateX(-50%); max-width: calc(100% - 32px); background: var(--panel); padding: 8px 14px; border-radius: 8px; font-weight: 600; text-align: center; pointer-events: none; }
   #settings { z-index: 4; background: rgba(5,8,6,0.88); }
   .card.settings { background: var(--bg); text-align: left; gap: 14px; width: min(360px, 100%); }
   .settings h2 { text-align: center; }
@@ -58,7 +58,7 @@
   .hidebtn { position: fixed; z-index: 2; right: 112px; bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); padding: 12px 16px; background: #2f6b3a; color: var(--fg); font: 600 0.95rem var(--body); box-shadow: 0 4px 16px rgba(0,0,0,0.5); touch-action: none; }
   .leaves { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
   body.cine .hidebtn { display: none; }
-  .goal { position: fixed; z-index: 2; left: 16px; top: calc(env(safe-area-inset-top, 0px) + 46px); display: flex; gap: 8px; align-items: center; font: 600 0.95rem var(--body); text-shadow: 0 2px 6px #000; pointer-events: none; }
+  .goal { position: fixed; z-index: 2; left: 16px; right: 16px; top: calc(env(safe-area-inset-top, 0px) + 46px); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font: 600 0.95rem var(--body); text-shadow: 0 2px 6px #000; pointer-events: none; }
   .goal .arrow { display: inline-block; font: 400 1.3rem var(--display); color: #ffd28a; }
   body.cine .goal { display: none; }
   .over { position: fixed; z-index: 3; inset: 0; display: grid; align-items: safe center; justify-items: center; overflow-y: auto; padding-block: 16px; padding-inline: 16px; background: rgba(5,8,6,0.6); }
@@ -73,7 +73,7 @@
 
 <div id="game"></div>
 <div class="vignette" id="vig"></div>
-<div class="goal" id="goal"><span id="goal-arrow" class="arrow" hidden>↑</span><span id="goal-text"></span></div>
+<div class="goal" id="goal"><span id="goal-arrow" class="arrow" hidden>↑</span><span id="goal-text"></span><span id="stun" class="stunned"></span></div>
 <div class="scare" id="scare"></div>
 <div class="toast" id="toast" hidden></div>
 <div class="cine" id="cine" hidden><div class="bar top"></div><div class="bar bottom"><p id="sub"></p></div><button id="skip" type="button">Пропустить сцену ›</button></div>
@@ -82,7 +82,7 @@
 <button class="fire" id="fire" type="button">Огонь</button>
 <button class="hidebtn" id="hidebtn" type="button" hidden>Спрятаться</button>
 <canvas class="leaves" id="leaves" hidden></canvas>
-<div class="hud"><span><span id="time">0.0 с</span> <span id="stun" class="stunned"></span></span><span class="right"><span id="hides">Кусты: 2</span><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><span id="fps" hidden></span><button id="snd" type="button">Звук: вкл</button><button id="opts" type="button">Настройки</button></span></div>
+<div class="hud"><span id="time">0.0 с</span><span class="right"><span id="hides">Кусты: 2</span><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><span id="fps" hidden></span><button id="snd" type="button">Звук: вкл</button><button id="opts" type="button">Настройки</button></span></div>
 <p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, клик, <kbd>Пробел</kbd> или кнопка «Огонь» — выстрел, <kbd>E</kbd> у куста — спрятаться (2 раза, до 10 с), <kbd>R</kbd> — перезарядка, <kbd>Shift</kbd> — бег. Попадание замораживает монстра на 3 секунды. Продержись 60 секунд — откроются ворота.</p>
 <div class="over" id="start">
   <div class="card">
@@ -1165,7 +1165,7 @@ const resultEl = document.getElementById('result'), vig = document.getElementByI
 function reset() {
   stage = 'forest'; gateTarget = 0; gateK = 0; monsterIdle = false; scareBy = 'monster';
   spider.active = false; spider.g.visible = false; spider.stun = 0; spider.g.rotation.set(0, 0, 0); spider.g.position.set(0, 0, -111.6);
-  tower.on = false; eagle.g.visible = false; roomLight.intensity = 0; roomGlass.visible = true; brokenDecal.visible = false; spiderSmall.g.visible = false;
+  tower.on = false; eagle.g.visible = false; eagle.state = 'none'; roomLight.intensity = 0; roomGlass.visible = true; brokenDecal.visible = false; spiderSmall.g.visible = false;
   hidden = false; hideT = 0; hidesLeft = HIDE_COUNT; hideBush = null; leavesEl.hidden = true;
   me.x = 0; me.z = 0; me.yaw = 0; me.pitch = 0;
   // monster appears somewhere far away, not in front of you
@@ -1414,7 +1414,7 @@ function update(dt) {
     // frozen: slumped, twitching, eyes dimmed
     stun = Math.max(0, stun - dt);
     animateLimbs(beast, 0, 0, 0.6, -0.2, -0.2);
-    if (dog.state === 'massage') { // melting with pleasure: slow sway, slack jaw, arms dangling
+    if (dog.state === 'massage' || (eagle.state === 'massage' && eagle.target === 'monster')) { // melting with pleasure: slow sway, slack jaw, arms dangling
       for (const a of beast.arms) a.sh.rotation.x = Math.sin(time * 1.5 + a.s) * 0.08;
       beast.jaw.rotation.x = 0.35;
       beast.head.rotation.z = Math.sin(time * 1.8) * 0.18;
@@ -1465,13 +1465,14 @@ function update(dt) {
     const t = actx.currentTime, gap = 1.1 - fear * 0.75, vol = 0.15 + fear * 0.6;
     thump(t, vol); thump(t + 0.18, vol * 0.7); nextBeat = t + gap;
   }
-  updateDog(dt, time); updateHearts(dt);
+  updateDog(dt, time); updateEagle(dt, time); updateHearts(dt);
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
   updateHiding(dt);
   if (hidden) { /* safe while hidden */ }
-  else if (spider.active && sd < 1.9 && spider.stun <= 0) spiderCatch();
+  else if (spider.active && sd < 1.9 && spider.stun <= 0) { if (eagle.state === 'ally') eagleSave('spider'); else spiderCatch(); }
   else if (monsterIdle) { /* far away in the forest */ }
   else if (d < 1.5 && stun <= 0 && dog.state === 'follow') dogSave();
+  else if (d < 1.5 && stun <= 0 && eagle.state === 'ally') eagleSave('monster');
   else if (d < 1.5 && stun <= 0) {
     over = true; best = Math.max(best, time); hideBtn.hidden = true; leavesEl.hidden = true;
     resultEl.textContent = 'Ты продержался ' + time.toFixed(1) + ' с, попаданий: ' + hits;
@@ -1722,7 +1723,8 @@ function updateSpider(dt) {
   const dx = me.x - g.position.x, dz = me.z - g.position.z, d = Math.hypot(dx, dz);
   if (sp.stun > 0) {
     sp.stun = Math.max(0, sp.stun - dt);
-    poseSpider(sp, sp.phase + Math.sin(time * 30) * 0.05, 0.1, 0.7);
+    if (eagle.state === 'massage' && eagle.target === 'spider') { poseSpider(sp, time * 1.5, 0.15, 0.45); g.rotation.z = Math.sin(time * 1.8) * 0.08; }
+    else { poseSpider(sp, sp.phase + Math.sin(time * 30) * 0.05, 0.1, 0.7); g.rotation.z = 0; }
     sp.eyeM.emissiveIntensity = 0.4;
   } else {
     const speed = stage === 'final' ? Math.min(3 + sp.t * 0.08, 9) : 3.5 + sp.t * 0.06;
@@ -1791,8 +1793,9 @@ function endTower() {
   if (tower.dog) { // the spider got shot in the cutscene; the eagle stays sitting, blissed out
     spider.stun = 2.5;
     eagle.g.visible = true; eaglePose(E_LAND.clone().setY(0.7), 0.6, 0); flapEagle(eagle, 0, 1, 0, 0.9);
+    eagle.state = 'ally'; eagle.t = 0; eagle.a = Math.random() * 6.3;
     gun.visible = true;
-  } else eagle.g.visible = false;
+  } else { eagle.g.visible = false; eagle.state = 'none'; }
   for (const h of hearts) { h.visible = false; h.userData.t = 99; }
   toast('Беги! Паук гонится за тобой!', 3);
   lastT = performance.now();
@@ -2024,6 +2027,70 @@ function towerDogBranch(t, dt) {
   } else {
     subEl.textContent = 'Беги обратно по тропинке!';
     camera.lookAt(0.5, 1.2, -96);
+  }
+}
+
+
+// ---------- the eagle as an ally: circles above you, once saves you with a massage, then flies off into the forest ----------
+eagle.state = 'none'; eagle.t = 0; eagle.a = 0; eagle.target = null;
+const eTop = new THREE.Vector3(), eAway = new THREE.Vector3();
+function targetHeadTop(which, out) {
+  if (which === 'spider') return spider.body.localToWorld(out.set(0, 1.38, 0.25));
+  monster.updateMatrixWorld(true);
+  return beast.head.localToWorld(out.set(0, 0.42, 0.02));
+}
+function eagleSave(which) {
+  eagle.state = 'swoop'; eagle.t = 0; eagle.target = which;
+  const tg = which === 'spider' ? spider.g.position : monster.position;
+  const ax = tg.x - me.x, az = tg.z - me.z, l = Math.hypot(ax, az) || 1;
+  tg.x += ax / l * 4; tg.z += az / l * 4; // knocked back as the eagle hits
+  if (which === 'spider') { pushOut(tg, 1.1, ZONES_ALL); spider.stun = 7; spider.flash = 1; }
+  else { pushOut(tg, 0.9, monsterZones()); stun = 7; hitFlash = 1; }
+  eagle.from = eagle.g.position.clone();
+  shriek(); noiseBurst(0.4, 0.7, 2200);
+  toast('Орёл спикировал на ' + (which === 'spider' ? 'паука' : 'монстра') + ' и делает ему массаж!', 3.5);
+}
+function updateEagle(dt, t) {
+  const g = eagle.g;
+  if (eagle.state === 'none' || eagle.state === 'gone') return;
+  eagle.t += dt;
+  if (eagle.state === 'ally') {
+    // circle above you
+    eagle.a += dt * 0.7;
+    const tx = me.x + Math.cos(eagle.a) * 5, ty = 5.5 + Math.sin(eagle.a * 2) * 0.6, tz = me.z + Math.sin(eagle.a) * 5;
+    const dx = tx - g.position.x, dz = tz - g.position.z;
+    g.position.x += dx * Math.min(1, dt * 2); g.position.y += (ty - g.position.y) * Math.min(1, dt * 1.5); g.position.z += dz * Math.min(1, dt * 2);
+    g.rotation.set(0, Math.atan2(-Math.sin(eagle.a), Math.cos(eagle.a)), -0.3);
+    eagle.head.rotation.z = 0;
+    flapEagle(eagle, t, 7, 0.45);
+  } else if (eagle.state === 'swoop') {
+    const k = ease(clamp01(eagle.t / 0.6));
+    targetHeadTop(eagle.target, eTop); eTop.y += 0.7;
+    g.position.copy(eagle.from).lerp(eTop, k);
+    g.rotation.set(0.4 * (1 - k), Math.atan2(eTop.x - eagle.from.x, eTop.z - eagle.from.z), 0);
+    flapEagle(eagle, t, 5, 0.2, -0.2);
+    if (k >= 1) { eagle.state = 'massage'; eagle.t = 0; }
+  } else if (eagle.state === 'massage') {
+    // perched on its head, kneading with the talons and patting with the wings
+    if (eagle.target === 'spider') spider.stun = Math.max(spider.stun, 2.5); else stun = Math.max(stun, 2.5);
+    targetHeadTop(eagle.target, eTop);
+    g.position.copy(eTop); g.position.y += 0.7 + Math.abs(Math.sin(eagle.t * 9)) * 0.06;
+    g.rotation.set(0.1, (eagle.target === 'spider' ? spider.g : monster).rotation.y, 0);
+    flapEagle(eagle, eagle.t, 5, 0.3, 0.5); // wings come down to pat the head
+    eagle.head.rotation.z = Math.sin(eagle.t * 2) * 0.25;
+    popHeart(eTop, t);
+    if (eagle.t > 4.5) {
+      eagle.state = 'leave'; eagle.t = 0;
+      eAway.set(g.position.x - me.x, 0, g.position.z - me.z); if (eAway.lengthSq() < 0.01) eAway.set(1, 0, 0); eAway.normalize();
+      if (eagle.target === 'spider') spider.stun = 2.5; else stun = 2.5;
+      toast('Орёл улетел в лес. Беги!', 3);
+    }
+  } else if (eagle.state === 'leave') {
+    g.position.x += eAway.x * 10 * dt; g.position.z += eAway.z * 10 * dt; g.position.y += 3.5 * dt;
+    g.rotation.set(-0.35, Math.atan2(eAway.x, eAway.z), 0);
+    eagle.head.rotation.z = 0;
+    flapEagle(eagle, t, 9, 0.7);
+    if (eagle.t > 4.5) { eagle.state = 'gone'; g.visible = false; }
   }
 }
 
