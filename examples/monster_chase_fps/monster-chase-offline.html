@@ -1427,7 +1427,8 @@ function update(dt) {
   pushOut(me, 0.35, playerZones());
   bob = moving ? bob + dt * (sprint ? 14 : 9) : bob * 0.9;
 
-  const mSpeed = 3.6 + time * 0.12;
+  let mSpeed = 3.6 + time * 0.12;
+  if (stage === 'forest' && gateTarget) mSpeed = Math.min(mSpeed * 0.5, 4.2); // worn out while you run for the gate (you walk at 5)
   const mx = me.x - monster.position.x, mz = me.z - monster.position.z, d = Math.hypot(mx, mz);
   if (stun > 0) {
     nav.since = 0; nav.best = Infinity;
@@ -1713,7 +1714,7 @@ function updateStage(dt) {
   gateK += (gateTarget - gateK) * Math.min(1, dt * 2);
   gateL.rotation.y = gateK * 1.5; gateR.rotation.y = -gateK * 1.5;
   if (stage === 'forest') {
-    if (time >= GATE_TIME && !gateTarget) { gateTarget = 1; creak(); toast('Ворота на севере открылись! Беги к ним!', 4); }
+    if (time >= GATE_TIME && !gateTarget) { gateTarget = 1; creak(); toast('Ворота на севере открылись! Беги к ним — монстр выдохся и замедлился!', 4); }
     if (!gateTarget) setGoal('Продержись: ' + Math.ceil(GATE_TIME - time) + ' с');
     else setGoal('Беги к воротам', 0, -ARENA);
     if (me.z < -ARENA - 0.8) {
