@@ -1138,22 +1138,8 @@ function updateDog(dt, t) {
     stun = Math.max(stun, 2.5);
     g.position.copy(headTop); g.position.y += Math.abs(Math.sin(dog.t * 10)) * 0.015;
     g.rotation.set(0.15, monster.rotation.y, 0);
-    for (const lg of dog.legs) {
-      if (lg.front) { // kneading, left and right paw in turn
-        const p = dog.t * 9 + (lg.side > 0 ? Math.PI : 0);
-        lg.hip.rotation.x = -0.5 + Math.sin(p) * 0.55;
-        lg.knee.rotation.x = -0.4 - Math.max(0, Math.cos(p)) * 0.6;
-      } else { lg.hip.rotation.x = 0.9; lg.knee.rotation.x = -1.2; } // sitting on the haunches
-    }
-    dog.body.rotation.x = -0.25; dog.body.rotation.z = Math.sin(dog.t * 9) * 0.06;
-    dog.tail.rotation.z = Math.sin(t * 16) * 0.7;
-    dog.head.rotation.y = Math.sin(dog.t * 2) * 0.3;
-    dog.jaw.rotation.x = 0.3; // happy pant
-    if (t > heartAt) { // pop a heart
-      heartAt = t + 0.35;
-      const h = hearts.find(s => s.userData.t > 1.4);
-      if (h) { h.userData.t = 0; h.userData.x = headTop.x + rnd(-0.4, 0.4); h.userData.z = headTop.z + rnd(-0.4, 0.4); h.userData.y = headTop.y + 0.2; h.visible = true; }
-    }
+    dogKnead(dog.t, t);
+    popHeart(headTop, t);
     if (dog.t > 4.5) {
       dog.state = 'flee'; dog.t = 0; yelp(); dog.body.rotation.set(0, 0, 0);
       dog.away.set(-(monster.position.x - me.x), 0, -(monster.position.z - me.z)).normalize();
@@ -1187,7 +1173,7 @@ const resultEl = document.getElementById('result'), vig = document.getElementByI
 function reset() {
   stage = 'forest'; gateTarget = 0; gateK = 0; monsterIdle = false; scareBy = 'monster';
   spider.active = false; spider.g.visible = false; spider.stun = 0; spider.g.rotation.set(0, 0, 0); spider.g.position.set(0, 0, -111.6);
-  tower.on = false; roomLight.intensity = 0; roomGlass.visible = true; brokenDecal.visible = false; spiderSmall.g.visible = false;
+  tower.on = false; eagle.g.visible = false; roomLight.intensity = 0; roomGlass.visible = true; brokenDecal.visible = false; spiderSmall.g.visible = false;
   hidden = false; hideT = 0; hidesLeft = HIDE_COUNT; hideBush = null; leavesEl.hidden = true;
   me.x = 0; me.z = 0; me.yaw = 0; me.pitch = 0;
   // monster appears somewhere far away, not in front of you
@@ -1787,7 +1773,8 @@ function spiderScare(dt) {
 const tower = { on: false, t: 0, flags: {} };
 const camP = new THREE.Vector3(), camT = new THREE.Vector3();
 function startTower() {
-  tower.on = true; tower.t = 0; tower.flags = {};
+  tower.on = true; tower.t = 0; tower.flags = {}; tower.dog = dog.state === 'follow'; heartAt = 0;
+  eagle.g.visible = false; for (const h of hearts) { h.visible = false; h.userData.t = 99; }
   if (hidden) leaveBush(false);
   document.body.classList.add('cine'); cineEl.hidden = false; subEl.textContent = '';
   hideBtn.hidden = true; toastEl.hidden = true; gun.visible = false; flash.intensity = 0;
@@ -1808,7 +1795,13 @@ function endTower() {
   me.x = 2.4; me.z = -104.8; me.yaw = Math.PI; me.pitch = 0;
   spider.active = true; spider.stun = 0; spider.t = 0; spider.g.visible = true;
   spider.g.position.set(-1, 0, -110.8); spider.g.rotation.set(0, 0, 0);
-  if (dog.state !== 'gone') { dog.state = 'follow'; dog.g.visible = true; dog.g.position.set(4.2, 0, -103.5); }
+  if (dog.state !== 'gone') { dog.state = 'follow'; dog.g.visible = true; dog.g.position.set(1.6, 0, -103.6); dog.g.rotation.set(0, Math.PI, 0); dog.body.rotation.set(0, 0, 0); }
+  if (tower.dog) { // the spider got shot in the cutscene; the eagle stays sitting, blissed out
+    spider.stun = 2.5;
+    eagle.g.visible = true; eaglePose(E_LAND.clone().setY(0.7), 0.6, 0); flapEagle(eagle, 0, 1, 0, 0.9);
+    gun.visible = true;
+  } else eagle.g.visible = false;
+  for (const h of hearts) { h.visible = false; h.userData.t = 99; }
   toast('Беги! Паук гонится за тобой!', 3);
   lastT = performance.now();
 }
@@ -1874,9 +1867,172 @@ function updateTower(dt, now) {
     const st = ease(clamp01((t - 11) / 0.8)); // get up and step away from the trunk
     camera.position.set(4.4 - 2.0 * st, 1.65, -107.0 + 2.2 * st);
     camera.lookAt(camera.position.x + (spider.g.position.x - camera.position.x) * look, 1.6 - 0.6 * (1 - look), -103 + (spider.g.position.z + 103) * look);
-  } else if (t < 15) {
+  } else if (tower.dog && t < 24.6) {
+    towerDogBranch(t, dt);
+  } else if (!tower.dog && t < 15) {
     subEl.textContent = 'Беги обратно по тропинке!';
   } else endTower();
+}
+
+
+// ---------- eagle (tower cutscene, when the chihuahua is still with you) ----------
+const featherTex = canvasTex(256, (x, s) => {
+  x.fillStyle = '#3e2a18'; x.fillRect(0, 0, s, s);
+  for (let i = 0; i < 900; i++) {
+    const px = Math.random() * s, py = Math.random() * s, w = rnd(6, 14);
+    x.strokeStyle = ['rgba(20,12,6,0.6)', 'rgba(110,80,50,0.45)', 'rgba(70,50,30,0.6)'][i % 3]; x.lineWidth = rnd(0.8, 1.6);
+    x.beginPath(); x.moveTo(px - w / 2, py); x.lineTo(px, py + w * 0.4); x.lineTo(px + w / 2, py); x.stroke();
+  }
+}, 2);
+function makeEagle() {
+  const g = new THREE.Group();
+  const brown = texMat(featherTex, 0.85, { bumpScale: 0.02 }), white = mat(0xece6da, 0.8), yellow = mat(0xe0a81c, 0.5), black = mat(0x0a0806, 0.3);
+  const S = r => new THREE.SphereGeometry(r, 16, 12), B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  mesh(S(0.32), brown, 0, 0, 0, g).scale.set(1, 0.85, 1.9);
+  mesh(S(0.22), mat(0x5a4028, 0.85), 0, -0.08, 0.32, g).scale.set(1.1, 0.9, 1.2);
+  const head = pivot(g, 0, 0.17, 0.62);
+  mesh(S(0.17), white, 0, 0, 0, head).scale.set(1, 1, 1.15);
+  const beak = mesh(new THREE.ConeGeometry(0.06, 0.2, 8), yellow, 0, -0.02, 0.22, head); beak.rotation.x = Math.PI / 2;
+  const hook = mesh(new THREE.ConeGeometry(0.03, 0.08, 6), yellow, 0, -0.06, 0.3, head); hook.rotation.x = Math.PI;
+  for (const s of [-1, 1]) { mesh(S(0.03), yellow, s * 0.09, 0.05, 0.1, head); mesh(S(0.018), black, s * 0.1, 0.05, 0.12, head); mesh(B(0.05, 0.015, 0.06), brown, s * 0.08, 0.09, 0.1, head).rotation.z = s * 0.4; }
+  const tail = pivot(g, 0, 0.02, -0.55);
+  mesh(B(0.45, 0.03, 0.5), white, 0, 0, -0.25, tail);
+  const wings = [];
+  for (const s of [-1, 1]) {
+    const sh = pivot(g, s * 0.25, 0.12, 0.1);
+    mesh(B(1.0, 0.05, 0.55), brown, s * 0.5, 0, 0, sh);
+    const el = pivot(sh, s * 1.0, 0, 0);
+    mesh(B(0.9, 0.04, 0.45), brown, s * 0.45, 0, -0.05, el);
+    for (let f = 0; f < 5; f++) mesh(B(0.38, 0.02, 0.07), mat(0x1e140c, 0.8), s * (0.95 + 0.12), 0, 0.12 - f * 0.1, el).rotation.y = s * (0.15 - f * 0.08);
+    wings.push({ sh, el, s });
+  }
+  for (const s of [-1, 1]) {
+    mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.3, 8), yellow, s * 0.12, -0.32, 0.1, g);
+    for (let c = -1; c <= 1; c++) { const cl = mesh(new THREE.ConeGeometry(0.015, 0.09, 5), black, s * 0.12 + c * 0.03, -0.5, 0.14, g); cl.rotation.x = 2.6; }
+  }
+  return { g, head, wings };
+}
+function flapEagle(e, t, speed, amp, droop = 0) {
+  for (const w of e.wings) {
+    w.sh.rotation.z = w.s * (Math.sin(t * speed) * amp - droop);
+    w.el.rotation.z = w.s * (Math.sin(t * speed - 0.7) * amp * 0.6 - droop * 0.5);
+  }
+}
+const eagle = makeEagle(); eagle.g.scale.setScalar(1.4); eagle.g.visible = false; scene.add(eagle.g);
+const eTalon = new THREE.Vector3(), eHead = new THREE.Vector3(), eTmp = new THREE.Vector3();
+
+// shared bits of the chihuahua's massage routine (monster's head or the eagle's)
+function dogKnead(tt, t) {
+  for (const lg of dog.legs) {
+    if (lg.front) { // kneading, left and right paw in turn
+      const p = tt * 9 + (lg.side > 0 ? Math.PI : 0);
+      lg.hip.rotation.x = -0.5 + Math.sin(p) * 0.55;
+      lg.knee.rotation.x = -0.4 - Math.max(0, Math.cos(p)) * 0.6;
+    } else { lg.hip.rotation.x = 0.9; lg.knee.rotation.x = -1.2; } // sitting on the haunches
+  }
+  dog.body.rotation.x = -0.25; dog.body.rotation.z = Math.sin(tt * 9) * 0.06;
+  dog.tail.rotation.z = Math.sin(t * 16) * 0.7;
+  dog.head.rotation.y = Math.sin(tt * 2) * 0.3;
+  dog.jaw.rotation.x = 0.3; // happy pant
+}
+function popHeart(pos, t) {
+  if (t <= heartAt) return;
+  heartAt = t + 0.35;
+  const h = hearts.find(s => s.userData.t > 1.4);
+  if (h) { h.userData.t = 0; h.userData.x = pos.x + rnd(-0.4, 0.4); h.userData.z = pos.z + rnd(-0.4, 0.4); h.userData.y = pos.y + 0.2; h.visible = true; }
+}
+
+// the chihuahua's part of the tower cutscene: shoot the spider, the eagle grabs her, she massages it, runs back
+const E_LAND = new THREE.Vector3(-6, 0, -104.8), DOG_SIT = new THREE.Vector3(-3.8, 0, -103.4), CAM = new THREE.Vector3(2.4, 1.65, -104.8);
+function eaglePose(pos, yaw, pitch) { eagle.g.position.copy(pos); eagle.g.rotation.set(pitch, yaw, 0); eagle.g.updateMatrixWorld(true); }
+function towerDogBranch(t, dt) {
+  const sp = spider.g.position;
+  // the spider stays down after being shot
+  const shot = t > 14.45;
+  spider.phase += dt * 2;
+  poseSpider(spider, spider.phase + (shot ? Math.sin(t * 30) * 0.05 : 0), shot ? 0.1 : 0.3, shot ? 0.7 : 0);
+  spider.eyeM.emissiveIntensity = shot ? 0.5 : 3;
+  spider.g.rotation.x = 0;
+  for (const h of hearts) if (h.visible) { h.userData.t += dt; h.position.set(h.userData.x + Math.sin(h.userData.t * 6) * 0.1, h.userData.y + h.userData.t * 0.9, h.userData.z); h.material.opacity = Math.max(0, 1 - h.userData.t / 1.4); if (h.userData.t > 1.4) h.visible = false; }
+  camera.position.copy(CAM);
+  if (t < 15.2) {
+    subEl.textContent = 'Ты стреляешь в паука!';
+    gun.visible = true; flash.intensity = 3.2;
+    if (t > 14.45) once('shot1', () => { flashT = 0.06; recoil = 1; noiseBurst(0.25, 1.2, 1800); shriek(); });
+    if (t > 14.95) once('shot2', () => { flashT = 0.06; recoil = 1; noiseBurst(0.25, 1.2, 1800); });
+    camera.lookAt(sp.x, 1.0, sp.z);
+    dog.g.visible = true; dog.g.position.copy(DOG_SIT); dog.g.rotation.set(0, Math.atan2(sp.x - DOG_SIT.x, sp.z - DOG_SIT.z), 0);
+    eagle.g.visible = false;
+    return;
+  }
+  eagle.g.visible = true;
+  if (t < 16.0) {
+    // a yelp to the left — an eagle swoops down on the chihuahua
+    subEl.textContent = 'Что это?!';
+    once('yelp1', () => yelp());
+    const k = ease(clamp01((t - 15.2) / 0.8));
+    const from = eTmp.set(-14, 9, -96), to = DOG_SIT.clone().setY(1.25);
+    eaglePose(from.clone().lerp(to, k), Math.atan2(to.x - from.x, to.z - from.z), 0.35 * (1 - k));
+    flapEagle(eagle, t, 6, 0.15, -0.2); // wings spread, gliding in
+    const look = ease(clamp01((t - 15.2) / 0.5));
+    camera.lookAt(sp.x + (DOG_SIT.x - sp.x) * look, 1.0 - 0.4 * look, sp.z + (DOG_SIT.z - sp.z) * look);
+    dog.g.position.copy(DOG_SIT); dog.jaw.rotation.x = 0.6;
+  } else if (t < 18.3) {
+    // she's carried up into the sky
+    subEl.textContent = 'Орёл уносит чихуахуа!';
+    once('grab', () => { yelp(); noiseBurst(0.3, 0.5, 2500); });
+    const k = ease(clamp01((t - 16.0) / 2.3));
+    const from = DOG_SIT.clone().setY(1.25), to = eTmp.set(-9, 7, -98);
+    eaglePose(from.clone().lerp(to, k), Math.atan2(to.x - from.x, to.z - from.z), -0.35);
+    flapEagle(eagle, t, 9, 0.7);
+    eagle.g.localToWorld(eTalon.set(0, -0.55, 0.12));
+    dog.g.position.copy(eTalon).add(eTmp.set(0, -0.35, 0)); dog.g.rotation.set(0.2, eagle.g.rotation.y, Math.sin(t * 7) * 0.3);
+    animateDog(dt, 6, t); // paddling in the air
+    camera.lookAt(eagle.g.position);
+  } else if (t < 21.3) {
+    // she climbs onto its head and gives it a massage; the eagle slowly glides down
+    subEl.textContent = 'Чихуахуа запрыгнула орлу на голову и делает массаж!';
+    const k = ease(clamp01((t - 18.3) / 3.0));
+    const from = eTmp.set(-9, 7, -98), to = E_LAND.clone().setY(1.6);
+    eaglePose(from.clone().lerp(to, k), Math.atan2(CAM.x - eagle.g.position.x, CAM.z - eagle.g.position.z) * 0.5, 0);
+    flapEagle(eagle, t, 9 - 6 * k, 0.6 - 0.4 * k);
+    eagle.head.rotation.z = Math.sin(t * 1.8) * 0.2; // blissful sway
+    eagle.head.localToWorld(eHead.set(0, 0.17, 0));
+    const j = ease(clamp01((t - 18.3) / 0.4)); // the hop from the talons to the head
+    eagle.g.localToWorld(eTalon.set(0, -0.9, 0.12));
+    dog.g.position.copy(eTalon).lerp(eHead, j); dog.g.position.y += Math.sin(j * Math.PI) * 0.6;
+    dog.g.rotation.set(0.15, eagle.g.rotation.y, 0); dog.g.scale.setScalar(1.5);
+    dogKnead(t, t);
+    if (j >= 1) popHeart(eHead, t);
+    camera.lookAt(eagle.g.position.x, eagle.g.position.y + 0.3, eagle.g.position.z);
+  } else if (t < 22.3) {
+    // the eagle lands, melted with pleasure
+    subEl.textContent = 'Орёл растаял от удовольствия…';
+    const k = ease(clamp01((t - 21.3) / 0.8));
+    eaglePose(E_LAND.clone().setY(1.6 - 0.9 * k), eagle.g.rotation.y, 0);
+    flapEagle(eagle, t, 3, 0.2 * (1 - k), 0.9 * k);
+    eagle.head.rotation.z = Math.sin(t * 1.8) * 0.25;
+    eagle.head.localToWorld(eHead.set(0, 0.17, 0));
+    dog.g.position.copy(eHead); dog.g.rotation.set(0.15, eagle.g.rotation.y, 0);
+    dogKnead(t, t); popHeart(eHead, t);
+    camera.lookAt(eagle.g.position.x, eagle.g.position.y + 0.2, eagle.g.position.z);
+  } else if (t < 23.8) {
+    // she hops down and runs back to you
+    subEl.textContent = 'Чихуахуа спрыгнула и бежит к тебе!';
+    eaglePose(E_LAND.clone().setY(0.7), eagle.g.rotation.y, 0);
+    flapEagle(eagle, t, 1, 0, 0.9); eagle.head.rotation.z = Math.sin(t * 1.8) * 0.25;
+    eagle.head.localToWorld(eHead.set(0, 0.17, 0));
+    const k = clamp01((t - 22.3) / 1.5);
+    const end = eTmp.set(1.6, 0, -103.6);
+    const p = eHead.clone().lerp(end, k); p.y = Math.max(0, eHead.y * (1 - k) + Math.sin(Math.min(k * 4, 1) * Math.PI) * 0.4 * (k < 0.25 ? 1 : 0));
+    if (k > 0.25) p.y = 0;
+    dog.g.position.copy(p); dog.g.rotation.set(0, Math.atan2(end.x - p.x, end.z - p.z), 0); dog.body.rotation.set(0, 0, 0);
+    animateDog(dt, 8, t);
+    camera.lookAt(dog.g.position.x, 0.6, dog.g.position.z);
+  } else {
+    subEl.textContent = 'Беги обратно по тропинке!';
+    camera.lookAt(0.5, 1.2, -96);
+  }
 }
 
 // ---------- graphics settings ----------
