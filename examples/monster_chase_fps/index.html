@@ -148,6 +148,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const ARENA = 40;
+const CAVE = new THREE.Vector3(-30, 0, 30); // the big cave in the forest (story epilogue)
 const root = document.getElementById('game');
 const TOUCH = matchMedia('(pointer: coarse)').matches; // phones and tablets get a lighter setup
 const renderer = new THREE.WebGLRenderer({ antialias: !TOUCH, powerPreference: 'high-performance' });
@@ -312,7 +313,7 @@ const trees = [], boxes = [];
   const stone = texMat(stoneTex, 0.9, { flatShading: true });
   for (let i = 0; i < 70; i++) {
     const x = rnd(-ARENA + 2, ARENA - 2), z = rnd(-ARENA + 2, ARENA - 2), s = rnd(0.15, 0.9);
-    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6 || Math.hypot(x, z - ARENA) < 7 || (Math.abs(x - 18) < 4.5 && Math.abs(z + 15) < 4)) continue; // not on the gates or inside the cabin
+    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6 || Math.hypot(x, z - ARENA) < 7 || (Math.abs(x - 18) < 4.5 && Math.abs(z + 15) < 4) || Math.hypot(x - CAVE.x, z - CAVE.z) < 11) continue; // not on the gates, the cabin or the cave
     const r = mesh(rough(new THREE.DodecahedronGeometry(1, 1), 0.35), stone, x, s * 0.3, z, scene);
     r.scale.set(s * rnd(0.8, 1.4), s * rnd(0.5, 0.9), s * rnd(0.8, 1.4)); r.rotation.y = Math.random() * 6;
     if (s > 0.5) trees.push({ x, z, r: s });
@@ -325,7 +326,7 @@ const bushes = [];
   const leaf = mat(0x1f3a1c, 0.95, { flatShading: true });
   for (let i = 0; i < 45; i++) {
     const x = rnd(-ARENA + 2, ARENA - 2), z = rnd(-ARENA + 2, ARENA - 2);
-    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6 || Math.hypot(x, z - ARENA) < 7 || (Math.abs(x - 18) < 4.5 && Math.abs(z + 15) < 4)) continue; // not on the gates or inside the cabin
+    if (Math.hypot(x, z) < 5 || Math.hypot(x, z + ARENA) < 6 || Math.hypot(x, z - ARENA) < 7 || (Math.abs(x - 18) < 4.5 && Math.abs(z + 15) < 4) || Math.hypot(x - CAVE.x, z - CAVE.z) < 11) continue; // not on the gates, the cabin or the cave
     const g = pivot(scene, x, 0, z); bushes.push({ x, z, g });
     for (let k = 0; k < 5; k++) { const b = mesh(rough(new THREE.IcosahedronGeometry(rnd(0.35, 0.6), 1), 0.3), leaf, rnd(-0.5, 0.5), rnd(0.25, 0.6), rnd(-0.5, 0.5), g); b.scale.y = 0.8; }
   }
@@ -361,7 +362,7 @@ function deadTree(x, z, h) {
 }
 for (let i = 0; i < 40; i++) {
   const x = rnd(-ARENA + 4, ARENA - 4), z = rnd(-ARENA + 4, ARENA - 4);
-  if (Math.hypot(x, z) < 8 || Math.hypot(x, z + ARENA) < 7 || Math.hypot(x, z - ARENA) < 8 || (Math.abs(x - 18) < 6 && Math.abs(z + 15) < 5.5)) continue;
+  if (Math.hypot(x, z) < 8 || Math.hypot(x - CAVE.x, z - CAVE.z) < 11 || Math.hypot(x, z + ARENA) < 7 || Math.hypot(x, z - ARENA) < 8 || (Math.abs(x - 18) < 6 && Math.abs(z + 15) < 5.5)) continue;
   const h = rnd(1, 1.5);
   if (i % 6 === 0) { deadTree(x, z, h); trees.push({ x, z, r: 0.35 * h + 0.1 }); }
   else { pine(x, z, h); trees.push({ x, z, r: 0.42 * h + 0.15 }); }
@@ -766,6 +767,110 @@ function radialSpriteTex(inner, outer) {
   const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
   const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, inner); g.addColorStop(1, outer);
   x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+}
+
+// ---------- behind the tall building (the crying boy), the cave, and the epilogue sets ----------
+ZONE.yard = { x0: -14, x1: 14, z0: -134, z1: -110 };
+ZONES_ALL.push(ZONE.yard);
+const MOUNT = new THREE.Vector3(600, 0, -300), PARK = new THREE.Vector3(600, 0, 300);
+let boy, exMan, flask, tent, campFlame, campLight, cobwebs = [], ferris, carousel, carHorses = [];
+{
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const wood = texMat(plankTex, 1, { bumpScale: 0.05 }), postGeo = B(0.18, 1.5, 0.18), railZ = B(0.05, 0.1, 3.05), railX = B(3.05, 0.1, 0.05);
+  // yard fences: the plaza fence continues around the back of the building
+  for (const s of [-1, 1]) for (let z = -112; z > -134; z -= 3) { mesh(postGeo, wood, s * 14, 0.75, z, scene); for (const y of [0.45, 1.1]) mesh(railZ, wood, s * 14, y, z - 1.5, scene); }
+  for (let x = -14; x < 14; x += 3) { mesh(postGeo, wood, x, 0.75, -134, scene); for (const y of [0.45, 1.1]) mesh(railX, wood, x + 1.5, y, -134, scene); }
+  // a bench and a lamp behind the building, where the boy sits
+  mesh(B(1.8, 0.08, 0.5), wood, 0, 0.45, -130.6, scene);
+  for (const x of [-0.75, 0.75]) mesh(B(0.08, 0.45, 0.45), wood, x, 0.22, -130.6, scene);
+  mesh(B(1.8, 0.5, 0.06), wood, 0, 0.75, -130.85, scene);
+  const by = new THREE.PointLight(0xffe0b0, 0.9, 9, 2); by.position.set(1.8, 2.6, -129.5); scene.add(by);
+  mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.8, 8), mat(0x2c2f33, 0.5), 1.8, 1.4, -130, scene);
+  mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffe0b0 }), 1.8, 2.85, -130, scene);
+
+  // the boy
+  boy = makeHuman({ shirt: 0xd8b030, pants: 0x3a5a8a });
+  boy.g.scale.setScalar(0.62); scene.add(boy.g);
+
+  // the cave in the forest (a hill of boulders with a dark mouth facing the middle of the forest)
+  const stone = texMat(stoneTex, 0.95, { flatShading: true, bumpScale: 0.06 });
+  for (const [x, y, z, r] of [[-3, 2, 0, 5], [0, 1.5, -4, 4], [0, 1.5, 4, 4], [-5, 3, -2, 4.5], [-5, 3, 3, 4], [-1, 4.5, 0, 3.5], [2, 0.8, -3.6, 2.2], [2, 0.8, 3.6, 2.2]]) {
+    const r0 = mesh(rough(new THREE.DodecahedronGeometry(r, 1), 0.2), stone, CAVE.x + x, y, CAVE.z + z, scene); r0.rotation.y = Math.random() * 6;
+  }
+  const mouth = mesh(new THREE.SphereGeometry(2.4, 16, 12, 0, Math.PI), mat(0x050404, 1), CAVE.x + 2.6, 0, CAVE.z, scene);
+  mouth.rotation.y = Math.PI / 2; mouth.scale.set(1, 1.15, 0.6); mouth.castShadow = false;
+  trees.push({ x: CAVE.x - 2, z: CAVE.z, r: 5.8 });
+
+  // cobwebs over the starting cabin (only shown in the epilogue)
+  const webTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    x.strokeStyle = 'rgba(235,235,235,0.75)'; x.lineWidth = 1.2;
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; x.beginPath(); x.moveTo(128, 128); x.lineTo(128 + Math.cos(a) * 128, 128 + Math.sin(a) * 128); x.stroke(); }
+    for (let r = 10; r < 125; r += 10) { x.beginPath(); for (let i = 0; i <= 12; i++) { const a = i / 12 * Math.PI * 2, rr = r * (0.93 + Math.random() * 0.1); const px = 128 + Math.cos(a) * rr, py = 128 + Math.sin(a) * rr; i ? x.lineTo(px, py) : x.moveTo(px, py); } x.stroke(); }
+    return new THREE.CanvasTexture(c);
+  })();
+  const webM = new THREE.MeshBasicMaterial({ map: webTex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  for (const [x, y, z, s, ry] of [[15.1, 2.4, -12.4, 2.4, 0], [20.6, 2.6, -12.4, 2.2, 0], [17.4, 1.7, -12.35, 1.6, 0], [19.3, 1.7, -12.3, 1.3, 0], [21.1, 1.8, -14.5, 2.6, Math.PI / 2], [14.9, 1.6, -15, 2.4, Math.PI / 2], [18, 3.6, -12.2, 3, 0.2]]) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(s, s), webM); w.position.set(x, y, z); w.rotation.y = ry; w.visible = false; scene.add(w); cobwebs.push(w);
+  }
+
+  // mountain for the hike
+  const mountain = mesh(new THREE.CylinderGeometry(6, 45, 25, 28, 3), texMat(groundTex, 1, { bumpScale: 0.08 }), MOUNT.x, 12.5, MOUNT.z, scene);
+  mountain.receiveShadow = true;
+  const mGround = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), texMat(groundTex, 1)); mGround.rotation.x = -Math.PI / 2; mGround.position.copy(MOUNT); scene.add(mGround);
+  for (let i = 0; i < 40; i++) { const a = Math.random() * 6.3, r = rnd(48, 90); pine(MOUNT.x + Math.cos(a) * r, MOUNT.z + Math.sin(a) * r, rnd(1.2, 1.8)); }
+  for (let i = 0; i < 14; i++) { const a = Math.random() * 6.3, r = rnd(14, 38); const h = 25 * (45 - r) / 39; pine(MOUNT.x + Math.cos(a) * r, MOUNT.z + Math.sin(a) * r, rnd(0.6, 0.9)).position.y = h - 0.3; }
+  tent = new THREE.Group(); tent.position.set(MOUNT.x - 1.5, 25, MOUNT.z - 1.5); scene.add(tent);
+  const tentM = mesh(new THREE.ConeGeometry(1.7, 2.0, 4), mat(0xe06a1a, 0.8), 0, 1.0, 0, tent); tentM.rotation.y = Math.PI / 4;
+  const door = mesh(new THREE.PlaneGeometry(0.8, 1.1), mat(0x3a1a08, 1, { side: THREE.DoubleSide }), 0, 0.55, 1.21, tent); door.rotation.x = -0.52;
+  tent.scale.setScalar(0.001);
+  const fire = pivot(scene, MOUNT.x + 1.5, 25, MOUNT.z + 0.5);
+  for (let i = 0; i < 4; i++) { const lg = mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6), trunkMat, 0, 0.08, 0, fire); lg.rotation.set(Math.PI / 2, i * 0.8, 0); }
+  campFlame = mesh(new THREE.ConeGeometry(0.25, 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xffa030 }), 0, 0.45, 0, fire);
+  campLight = new THREE.PointLight(0xff9a40, 0, 12, 2); campLight.position.set(MOUNT.x + 1.5, 26, MOUNT.z + 0.5); scene.add(campLight);
+
+  // amusement park
+  const pGround = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), texMat(groundTex, 1)); pGround.rotation.x = -Math.PI / 2; pGround.position.copy(PARK); scene.add(pGround);
+  const plaza2 = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), mat(0xb8a888, 0.9)); plaza2.rotation.x = -Math.PI / 2; plaza2.position.set(PARK.x, 0.02, PARK.z - 6); scene.add(plaza2);
+  const colors = [0xe84a4a, 0xf0c030, 0x4ab0e8, 0x6ad04a, 0xd060d0];
+  ferris = pivot(scene, PARK.x - 8, 12, PARK.z - 16);
+  mesh(new THREE.TorusGeometry(10, 0.2, 8, 48), mat(0xeeeeee, 0.4, { metalness: 0.5 }), 0, 0, 0, ferris);
+  mesh(new THREE.TorusGeometry(2, 0.25, 8, 24), mat(0xe84a4a, 0.4), 0, 0, 0, ferris);
+  ferris.gondolas = [];
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2;
+    const sp = mesh(new THREE.CylinderGeometry(0.07, 0.07, 10, 6), mat(0xcccccc, 0.4), Math.cos(a) * 5, Math.sin(a) * 5, 0, ferris); sp.rotation.z = a + Math.PI / 2;
+    const gnd = new THREE.Group(); gnd.position.set(Math.cos(a) * 10, Math.sin(a) * 10, 0); ferris.add(gnd);
+    mesh(B(1.4, 1.1, 1.2), mat(colors[i % 5], 0.6), 0, -0.9, 0, gnd); ferris.gondolas.push(gnd);
+    mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: colors[(i + 2) % 5] }), Math.cos(a + 0.26) * 10, Math.sin(a + 0.26) * 10, 0.25, ferris);
+  }
+  for (const s of [-1, 1]) for (const z of [-1.5, 1.5]) { const leg = mesh(new THREE.CylinderGeometry(0.2, 0.25, 13, 8), mat(0x888888, 0.5), PARK.x - 8 + s * 3, 6, PARK.z - 16 + z, scene); leg.rotation.z = s * 0.23; }
+  carousel = pivot(scene, PARK.x + 10, 0, PARK.z - 8);
+  mesh(new THREE.CylinderGeometry(5, 5, 0.4, 24), mat(0xc84a8a, 0.6), 0, 0.2, 0, carousel);
+  mesh(new THREE.ConeGeometry(5.6, 2.2, 24), mat(0xf0d040, 0.6), 0, 4.6, 0, carousel);
+  mesh(new THREE.CylinderGeometry(0.4, 0.4, 3.6, 10), mat(0xeeeeee, 0.5), 0, 2, 0, carousel);
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2, x = Math.cos(a) * 3.8, z = Math.sin(a) * 3.8;
+    mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.4, 6), mat(0xd8c070, 0.3, { metalness: 0.6 }), x, 2, z, carousel);
+    const h = pivot(carousel, x, 1.3, z); h.rotation.y = -a; mesh(B(0.4, 0.5, 1.1), mat(colors[i % 5], 0.6), 0, 0, 0, h); mesh(B(0.3, 0.45, 0.3), mat(colors[i % 5], 0.6), 0, 0.35, 0.5, h);
+    carHorses.push(h);
+  }
+  const archTex = (() => { const c = document.createElement('canvas'); c.width = 512; c.height = 128; const x = c.getContext('2d');
+    x.fillStyle = '#c83a3a'; x.fillRect(0, 0, 512, 128); x.fillStyle = '#ffe080'; x.font = 'bold 40px sans-serif'; x.textAlign = 'center'; x.fillText('ПАРК АТТРАКЦИОНОВ', 256, 78);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; })();
+  for (const s of [-1, 1]) mesh(new THREE.CylinderGeometry(0.3, 0.3, 5, 10), mat(0xeeeeee, 0.5), PARK.x + s * 5, 2.5, PARK.z + 12, scene);
+  mesh(B(11, 1.6, 0.3), mat(0xffffff, 0.6, { map: archTex }), PARK.x, 5.3, PARK.z + 12, scene);
+  for (const x of [-12, 12]) { const pl = new THREE.PointLight(0xfff0d0, 1.0, 22, 2); pl.position.set(PARK.x + x, 6, PARK.z - 6); scene.add(pl); }
+  for (let i = 0; i < 6; i++) { // balloons
+    const b = mesh(new THREE.SphereGeometry(0.35, 12, 10), mat(colors[i % 5], 0.3), PARK.x + rnd(-6, 6), rnd(5, 8), PARK.z + rnd(4, 11), scene); b.scale.y = 1.2;
+  }
+
+  // the man the monster used to be, and the antidote flask
+  exMan = makeHuman({ shirt: 0x2f5a3a, pants: 0x3a2a1a }); exMan.g.visible = false; scene.add(exMan.g);
+  flask = new THREE.Group(); scene.add(flask); flask.visible = false;
+  mesh(new THREE.SphereGeometry(0.14, 14, 10), mat(0x50ff70, 0.1, { emissive: 0x30c040, emissiveIntensity: 1.2, transparent: true, opacity: 0.85 }), 0, 0.14, 0, flask);
+  mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.16, 10), mat(0xcfe8d8, 0.1, { transparent: true, opacity: 0.6 }), 0, 0.32, 0, flask);
+  mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.06, 8), mat(0x8a5a2a, 0.9), 0, 0.42, 0, flask);
 }
 
 // sky: stars, moon with halo, drifting ground mist
@@ -1330,6 +1435,9 @@ const overEl = document.getElementById('over'), startEl = document.getElementByI
 const resultEl = document.getElementById('result'), vig = document.getElementById('vig');
 
 function reset() {
+  boy.found = false; boy.g.visible = true; boy.g.scale.setScalar(0.62); epi.on = false; setSky('night');
+  for (const w of cobwebs) w.visible = false; tent.scale.setScalar(0.001); campLight.intensity = 0; campFlame.visible = false;
+  exMan.g.visible = false; flask.visible = false; actor.g.visible = false; monster.visible = true; spider.g.scale.setScalar(1);
   hasKey = false; keyG.visible = false; bigGateTarget = 0; bigGateK = 0; bigGateL.rotation.y = 0; bigGateR.rotation.y = 0; action = null; actBtn.hidden = true;
   won = false; document.body.classList.remove('cine');
   ending.on = false; policeCar.visible = false; officers.forEach(o => { o.g.visible = false; }); iLight.intensity = 0; winEl.hidden = true;
@@ -1362,7 +1470,10 @@ function pushOut(p, r, zones = ZONES_FOREST) {
     const dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz);
     if (d < r) {
       if (d > 0) { p.x = cx + dx / d * r; p.z = cz + dz / d * r; }
-      else { p.z = b.maxZ + r; } // inside: pop out the front
+      else { // inside: pop out through the nearest wall
+        const ex = [p.x - b.minX, b.maxX - p.x, p.z - b.minZ, b.maxZ - p.z], m = Math.min(...ex);
+        if (m === ex[0]) p.x = b.minX - r; else if (m === ex[1]) p.x = b.maxX + r; else if (m === ex[2]) p.z = b.minZ - r; else p.z = b.maxZ + r;
+      }
     }
   }
   clampZones(p, r, zones);
@@ -1491,7 +1602,7 @@ addEventListener('keydown', e => {
   initAudio();
   if (paused) return;
   const k = e.key.toLowerCase();
-  if (cut.on || tower.on || ending.on) { if (k === ' ' || k === 'enter' || k === 'escape') { e.preventDefault(); cut.on ? endCutscene() : tower.on ? endTower() : showWin(); } return; }
+  if (cut.on || tower.on || ending.on || epi.on) { if (k === ' ' || k === 'enter' || k === 'escape') { e.preventDefault(); cut.on ? endCutscene() : tower.on ? endTower() : epi.on ? finishEpilogue() : boy.found ? startEpilogue() : showWin(); } return; }
   if (k.startsWith('arrow') || k === ' ') e.preventDefault();
   keys[k] = true;
   if (over && k === 'enter') { reset(); lockMouse(); }
@@ -1664,7 +1775,7 @@ function update(dt) {
     const t = actx.currentTime, gap = 1.1 - fear * 0.75, vol = 0.15 + fear * 0.6;
     thump(t, vol); thump(t + 0.18, vol * 0.7); nextBeat = t + gap;
   }
-  updateDog(dt, time); updateEagle(dt, time); updateHearts(dt);
+  updateDog(dt, time); updateEagle(dt, time); updateHearts(dt); updateBoy(dt, time);
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
   updateHiding(dt);
   if (hidden) { /* safe while hidden */ }
@@ -1781,7 +1892,7 @@ function endCutscene() {
   dog.g.position.copy(L(-0.1, 0, 11.5)); dog.g.rotation.set(0, 0, 0);
   if (!matchMedia('(pointer: coarse)').matches) toast('Кликни по экрану, чтобы управлять мышью. Беги!', 3);
 }
-for (const ev of ['click', 'pointerdown']) document.getElementById('skip').addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); cut.on ? endCutscene() : tower.on ? endTower() : showWin(); });
+for (const ev of ['click', 'pointerdown']) document.getElementById('skip').addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); cut.on ? endCutscene() : tower.on ? endTower() : epi.on ? finishEpilogue() : boy.found ? startEpilogue() : showWin(); });
 
 function runActor(dt, speed, phase) {
   animateLimbs(actor, phase, 0.75, 0.15, 0, -1.3);
@@ -1878,7 +1989,7 @@ let finalStart = 0, stage = 'forest', gateTarget = 0, gateK = 0, monsterIdle = f
 const goalEl = document.getElementById('goal'), goalText = document.getElementById('goal-text'), goalArrow = document.getElementById('goal-arrow');
 
 function playerZones() {
-  if (stage === 'path') return [ZONE.pathOnly, ZONE.plaza];
+  if (stage === 'path') return [ZONE.pathOnly, ZONE.plaza, ZONE.yard];
   const z = gateTarget ? [...ZONES_ALL] : [ZONE.forest];
   if (bigGateTarget) z.push(ZONE.south, ZONE.city);
   return z;
@@ -1979,6 +2090,7 @@ function spiderScare(dt) {
 const tower = { on: false, t: 0, flags: {} };
 const camP = new THREE.Vector3(), camT = new THREE.Vector3();
 function startTower() {
+  if (boy.found) boy.g.visible = false;
   tower.on = true; tower.t = 0; tower.flags = {}; tower.dog = true; heartAt = 0;
   if (dog.state !== 'follow') { dog.state = 'follow'; dog.body.rotation.set(0, 0, 0); dog.g.scale.setScalar(1.5); } // she waited for you by the building
   eagle.g.visible = false; for (const h of hearts) { h.visible = false; h.userData.t = 99; }
@@ -2002,6 +2114,7 @@ function endTower() {
   me.x = 2.4; me.z = -104.8; me.yaw = Math.PI; me.pitch = 0;
   spider.active = true; spider.stun = 0; spider.t = 0; spider.g.visible = true;
   spider.g.position.set(-1, 0, -110.8); spider.g.rotation.set(0, 0, 0);
+  if (boy.found) { boy.g.visible = true; boy.g.position.set(3.4, 0, -104.2); }
   if (tower.dog || dog.state !== 'gone') { dog.state = 'follow'; dog.g.visible = true; dog.g.position.set(1.6, 0, -103.6); dog.g.rotation.set(0, Math.PI, 0); dog.body.rotation.set(0, 0, 0); }
   if (tower.dog) { // the spider got shot in the cutscene; the eagle stays sitting, blissed out
     spider.stun = 2.5;
@@ -2344,20 +2457,21 @@ function openBigGate() {
   bigGateTarget = 1; creak(); chime();
   toast('Ворота открыты! Беги по тропинке в город!', 4);
 }
-function spiderZones() { const z = [ZONE.forest, ZONE.corridor, ZONE.plaza]; if (bigGateTarget) z.push(ZONE.south, ZONE.city); return z; }
+function spiderZones() { const z = [ZONE.forest, ZONE.corridor, ZONE.plaza, ZONE.yard]; if (bigGateTarget) z.push(ZONE.south, ZONE.city); return z; }
 function updateAction(dt) {
   bigGateK += (bigGateTarget - bigGateK) * Math.min(1, dt * 1.5);
   bigGateL.rotation.y = -bigGateK * 1.5; bigGateR.rotation.y = bigGateK * 1.5;
   action = null;
-  if (keyG.visible && !hasKey && Math.hypot(me.x - keyG.position.x, me.z - keyG.position.z) < 2.6) action = 'key';
+  if (!boy.found && Math.hypot(me.x - BOY_SPOT.x, me.z - BOY_SPOT.z) < 3) action = 'boy';
+  else if (keyG.visible && !hasKey && Math.hypot(me.x - keyG.position.x, me.z - keyG.position.z) < 2.6) action = 'key';
   else if (!bigGateTarget && Math.hypot(me.x, me.z - ARENA) < 5) {
     if (hasKey) action = 'gate';
     else if (time > lockedToastAt) { lockedToastAt = time + 6; toast('Огромные ворота заперты. Нужен ключ.', 3); }
   }
   actBtn.hidden = !action;
-  actBtn.textContent = action === 'key' ? 'Взять ключ (E)' : 'Открыть ворота ключом (E)';
+  actBtn.textContent = action === 'boy' ? 'Сказать: «Пойдём со мной» (E)' : action === 'key' ? 'Взять ключ (E)' : 'Открыть ворота ключом (E)';
 }
-function doAction() { if (action === 'key') pickKey(); else if (action === 'gate') openBigGate(); }
+function doAction() { if (action === 'boy') boyJoin(); else if (action === 'key') pickKey(); else if (action === 'gate') openBigGate(); }
 actBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); initAudio(); doAction(); });
 
 // siren: two-tone wail
@@ -2383,15 +2497,16 @@ function startEnding() {
   spider.active = false; spider.g.visible = true; spider.stun = 0; spider.g.position.set(0, 0, 116); spider.g.rotation.set(0, 0, 0);
   eagle.g.visible = false;
   if (dog.state === 'follow') { dog.g.visible = true; dog.g.position.set(-1.2, 0, 130.2); dog.g.rotation.set(0, Math.PI, 0); }
+  if (boy.found) { boy.g.visible = true; placeChar(boy, 0.4, 129.6, Math.PI); animateLimbs(boy, 0, 0, 0.05, 0, -0.15); }
   siren(9);
 }
-function showWin() {
+function showWin(happy) {
   ending.on = false; cineEl.hidden = true; document.body.classList.remove('cine');
   fadeEl.style.transition = ''; fadeEl.style.opacity = 0; iLight.intensity = 0;
   for (const l of policeLights) if (l.isLight) l.intensity = 0;
   over = true; won = true; best = Math.max(best, time); document.body.classList.add('cine');
   camera.fov = 55; camera.updateProjectionMatrix();
-  winText.textContent = 'Ты выбрался из леса, рассказал полиции про монстра-паука и других монстров, и тебя отпустили домой. Время: ' + time.toFixed(1) + ' с, попаданий: ' + hits + '.' +
+  winText.textContent = happy ? 'Счастливый конец! Мальчик нашёл друзей, монстр снова стал человеком, паук — маленьким паучком, и все вместе пошли в парк аттракционов. Время: ' + time.toFixed(1) + ' с.' : 'Ты выбрался из леса, рассказал полиции про монстра-паука и других монстров, и тебя отпустили домой. Время: ' + time.toFixed(1) + ' с, попаданий: ' + hits + '.' +
     (dog.state === 'follow' ? ' Чихуахуа поехала домой вместе с тобой.' : '');
   winEl.hidden = false;
   try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
@@ -2460,13 +2575,269 @@ function updateEnding(dt, now) {
     for (const r of detective.arms) r.el.rotation.x = -0.9 + (t > 15 && t < 17.5 ? Math.sin(t * 6) * 0.15 : 0);
     if (t < 17.5) subEl.textContent = '— Рассказывай. Что там произошло?';
     else if (t < 20.5) subEl.textContent = '— Я видел монстра-паука… огромного, с восемью глазами!';
-    else if (t < 23.5) subEl.textContent = '— И других монстров! Один гонялся за мной по лесу…';
+    else if (t < 23.5) subEl.textContent = '— И других монстров! Один гонялся за мной по лесу…' + (boy.found ? ' А этого мальчика я нашёл за девятиэтажкой.' : '');
     else subEl.textContent = '— …Ладно. Мы проверим этот лес. Езжай домой.';
+  } else if (boy.found) {
+    startEpilogue();
   } else if (t < 28.5) {
     iLight.intensity = 0;
     fadeEl.style.opacity = 1;
     subEl.textContent = 'Тебя отвезли домой.';
   } else showWin();
+}
+
+
+// ---------- the crying boy ----------
+boy.found = false; boy.phase = 0; boy.sobAt = 0;
+const BOY_SPOT = new THREE.Vector3(0, 0, -130.3);
+function sob() {
+  if (!actx || !soundOn) return;
+  const t = actx.currentTime;
+  for (const off of [0, 0.32, 0.6]) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(620, t + off); o.frequency.exponentialRampToValueAtTime(380, t + off + 0.25);
+    g.gain.setValueAtTime(0.0001, t + off); g.gain.exponentialRampToValueAtTime(0.06, t + off + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.28);
+    o.connect(g).connect(actx.destination); o.start(t + off); o.stop(t + off + 0.3);
+  }
+}
+function boyCryPose(t) {
+  boy.g.position.set(BOY_SPOT.x, 0.47 - 0.95 * 0.62, BOY_SPOT.z); // sitting on the bench boy.g.rotation.set(0, 0, 0);
+  for (const l of boy.legs) { l.hip.rotation.x = -1.5; l.knee.rotation.x = 1.45; }
+  for (const a of boy.arms) { a.sh.rotation.x = -1.7 + Math.sin(t * 9) * 0.04; a.sh.rotation.z = -a.s * 0.25; a.el.rotation.x = -1.9; } // hands to his face
+  boy.head.rotation.set(0.45 + Math.sin(t * 9) * 0.05, 0, 0);
+}
+function boyStandPose() {
+  for (const a of boy.arms) { a.sh.rotation.z = a.s * 0.1; }
+  boy.head.rotation.set(0, 0, 0);
+}
+function boyJoin() {
+  if (boy.found) return;
+  boy.found = true; boyStandPose(); chime();
+  toast('— Не плачь. Пойдём со мной! Мальчик вытер слёзы и пошёл за тобой.', 4.5);
+}
+function updateBoy(dt, t) {
+  if (!boy.found) {
+    boyCryPose(t);
+    if (Math.hypot(me.x - BOY_SPOT.x, me.z - BOY_SPOT.z) < 14 && t > boy.sobAt) { sob(); boy.sobAt = t + 2.6; }
+    return;
+  }
+  // walk beside you, a little behind
+  const sx = Math.sin(me.yaw), cz = Math.cos(me.yaw);
+  const gx = me.x + sx * 1.6 - cz * 1.1, gz = me.z + cz * 1.6 + sx * 1.1;
+  const p = boy.g.position, dx = gx - p.x, dz = gz - p.z, d = Math.hypot(dx, dz);
+  const speed = d > 0.3 ? Math.min(10, d * 3 + 1) : 0;
+  if (speed) { p.x += dx / d * Math.min(d, speed * dt); p.z += dz / d * Math.min(d, speed * dt); boy.g.rotation.y = Math.atan2(dx, dz); }
+  pushOut(p, 0.25, playerZones()); p.y = 0;
+  boy.phase += dt * (speed ? 11 : 0);
+  animateLimbs(boy, boy.phase, speed ? 0.7 : 0, 0.1, 0, speed ? -1.2 : -0.15);
+}
+
+// ---------- epilogue (only if you saved the boy) ----------
+const epi = { on: false, t: 0, flags: {} };
+const skyObjs = []; scene.traverse(o => { if (o.material && o.material.fog === false && (o.isPoints || o.isMesh || o.isSprite) && o.parent === scene && !hearts.includes(o)) skyObjs.push({ o, base: o.position.clone() }); });
+const hemiLight = (() => { let h; scene.traverse(o => { if (o.isHemisphereLight) h = o; }); return h; })();
+const SKY0 = { bg: scene.background.clone(), fog: scene.fog.color.clone(), dens: scene.fog.density, hemi: hemiLight.intensity, moon: moon.intensity, moonC: moon.color.clone() };
+function setSky(mode) {
+  const day = mode === 'day', dusk = mode === 'dusk';
+  const bg = day ? new THREE.Color(0x9fcbea) : dusk ? new THREE.Color(0x3a2c48) : SKY0.bg;
+  scene.background.copy(bg); scene.fog.color.copy(bg);
+  scene.fog.density = day ? 0.008 : dusk ? 0.018 : SKY0.dens;
+  hemiLight.intensity = day ? 1.0 : dusk ? 0.5 : SKY0.hemi;
+  moon.intensity = day ? 1.3 : dusk ? 0.5 : SKY0.moon;
+  moon.color.set(day ? 0xfff2d8 : dusk ? 0xffa070 : SKY0.moonC.getHex());
+  for (const s of skyObjs) { s.o.visible = !day; s.o.position.copy(s.base); }
+  for (const m of mist) m.visible = !day && settings.mist; motes.visible = !day && settings.mist;
+}
+function placeChar(c, x, z, yaw, y = 0) { c.g.position.set(x, y, z); c.g.rotation.set(0, yaw, 0); }
+function walkChar(c, from, to, k, phase, y0 = 0, y1 = 0) {
+  c.g.position.set(from.x + (to.x - from.x) * k, y0 + (y1 - y0) * k, from.z + (to.z - from.z) * k);
+  c.g.rotation.set(0, Math.atan2(to.x - from.x, to.z - from.z), 0);
+  animateLimbs(c, phase, k < 1 ? 0.6 : 0, 0.1, 0, k < 1 ? -0.5 : -0.15);
+}
+function jumpChar(c, t, off) { c.g.position.y = Math.abs(Math.sin(t * 7 + off)) * 0.35; for (const a of c.arms) { a.sh.rotation.x = -2.6 + Math.sin(t * 7 + off) * 0.3; a.el.rotation.x = -0.2; } }
+function monsterSit(cry, t) {
+  for (const l of beast.legs) { l.hip.rotation.x = -1.35; l.knee.rotation.x = 1.6; }
+  monster.position.y = -0.9; monster.rotation.x = 0;
+  for (const a of beast.arms) { a.sh.rotation.x = -0.9 + (cry ? Math.sin(t * 9 + a.s) * 0.05 : 0); a.el.rotation.x = -1.0; }
+  beast.head.rotation.x = cry ? -0.2 : -0.85; beast.head.rotation.z = cry ? Math.sin(t * 8) * 0.06 : 0;
+  beast.jaw.rotation.x = cry ? 0.15 + Math.abs(Math.sin(t * 8)) * 0.1 : 0.05;
+  beast.eyeM.emissiveIntensity = cry ? 0.8 : 2; beast.eyeGlow.intensity = cry ? 0.4 : 1;
+  for (const m of beast.skin) m.emissive.setRGB(0, 0, 0);
+}
+const fv = new THREE.Vector3(), fv2 = new THREE.Vector3();
+function startEpilogue() {
+  ending.on = false; epi.on = true; epi.t = 0; epi.flags = {}; epi.sky = ''; heartAt = 0;
+  document.body.classList.add('cine'); cineEl.hidden = false; subEl.textContent = '';
+  fadeEl.style.transition = 'none'; fadeEl.style.opacity = 1;
+  iLight.intensity = 0; policeCar.visible = false; officers.forEach(o => { o.g.visible = false; });
+  actor.g.visible = true; boy.g.visible = true; boyStandPose();
+  monster.visible = false; spider.g.visible = false; spider.active = false; eagle.g.visible = false; gun.visible = false; flash.intensity = 0;
+  epi.withDog = dog.state === 'follow'; epi.withEagle = eagle.state !== 'none';
+  dog.g.visible = epi.withDog; dog.body.rotation.set(0, 0, 0);
+  for (const h of hearts) { h.visible = false; h.userData.t = 99; }
+}
+function finishEpilogue() {
+  epi.on = false; setSky('night'); for (const w of cobwebs) w.visible = false;
+  campLight.intensity = 0; actor.g.visible = false; exMan.g.visible = false; flask.visible = false;
+  scareEl.style.opacity = 0; showWin(true);
+}
+function sub(t, list) { for (const [a, b, txt] of list) if (t >= a && t < b) { subEl.textContent = txt; return; } subEl.textContent = ''; }
+function updateEpilogue(dt, now) {
+  const t = (epi.t += dt), T = now / 1000;
+  updateHearts(dt);
+  const mode = t < 14 ? 'dusk' : t < 17.5 ? 'night' : 'day';
+  if (mode !== epi.sky) { epi.sky = mode; setSky(mode); for (const w of cobwebs) w.visible = mode === 'day'; }
+  for (const s of skyObjs) s.o.position.set(s.base.x + camera.position.x, s.base.y, s.base.z + camera.position.z); // the sky travels with you
+  const fade = (a, b) => { fadeEl.style.opacity = clamp01((t - a) / (b - a)); };
+  const unfade = (a, b) => { fadeEl.style.opacity = 1 - clamp01((t - a) / (b - a)); };
+  const slope = r => 25 * (45 - r) / 39;
+  if (t < 3) {
+    sub(t, [[0, 3, 'Через неделю вы с мальчиком поехали в поход.']]);
+    fadeEl.style.opacity = 1;
+  } else if (t < 9) {
+    // climbing the mountain
+    sub(t, [[3, 9, 'Вы забираетесь на гору…']]);
+    unfade(3, 3.6);
+    const k = clamp01((t - 3) / 6);
+    const r = 30 - 23 * k, rb = r + 1.6;
+    walkChar(actor, fv.set(MOUNT.x - 0.6, 0, MOUNT.z + 30), fv2.set(MOUNT.x - 0.6, 0, MOUNT.z + 7), k, t * 9);
+    actor.g.position.y = slope(r); actor.g.rotation.x = -0.15;
+    walkChar(boy, fv.set(MOUNT.x + 0.6, 0, MOUNT.z + 31.6), fv2.set(MOUNT.x + 0.6, 0, MOUNT.z + 8.6), k, t * 10);
+    boy.g.position.y = slope(rb);
+    if (epi.withDog) { dog.g.position.set(MOUNT.x + 1.6, slope(r - 1), MOUNT.z + r - 1); dog.g.rotation.set(-0.3, Math.PI, 0); animateDog(dt, 6, t); }
+    camera.position.set(MOUNT.x + 6, slope(r + 7) + 3, MOUNT.z + r + 7); camera.lookAt(actor.g.position.x, actor.g.position.y + 1.2, actor.g.position.z);
+  } else if (t < 14) {
+    // the summit: put up the tent, light a fire
+    sub(t, [[9, 14, 'Вы забрались на гору и поставили палатку.']]);
+    actor.g.rotation.x = 0;
+    const k = ease(clamp01((t - 9.5) / 2.5));
+    tent.scale.setScalar(Math.max(0.001, k));
+    placeChar(actor, MOUNT.x + 0.3, MOUNT.z + 1.2, -0.6, 25); placeChar(boy, MOUNT.x + 2.6, MOUNT.z + 1.6, -1.6, 25);
+    for (const c of [actor, boy]) { animateLimbs(c, t * 6, k < 1 ? 0.25 : 0, 0.1, k < 1 ? -0.9 : 0, k < 1 ? -0.4 : -0.15); c.g.position.y = 25; }
+    if (epi.withDog) { dog.g.position.set(MOUNT.x + 1.2, 25, MOUNT.z + 2.6); dog.g.rotation.set(0, Math.PI, 0); animateDog(dt, 0, t); }
+    campLight.intensity = t > 12 ? 1.8 + Math.sin(T * 13) * 0.2 : 0; campFlame.visible = t > 12; campFlame.scale.y = 1 + Math.sin(T * 17) * 0.15;
+    camera.position.set(MOUNT.x + 5, 27.2, MOUNT.z + 7); camera.lookAt(MOUNT.x, 25.8, MOUNT.z);
+  } else if (t < 17.5) {
+    sub(t, [[14, 17.5, 'Ночь. Вы уснули в палатке у костра…']]);
+    actor.g.visible = false; boy.g.visible = t < 14.5;
+    campLight.intensity = 1.8 + Math.sin(T * 13) * 0.2; campFlame.scale.y = 1 + Math.sin(T * 17) * 0.15;
+    camera.position.set(MOUNT.x + 6, 28 + (t - 14) * 0.4, MOUNT.z + 8); camera.lookAt(MOUNT.x, 26 + (t - 14) * 0.8, MOUNT.z);
+    fade(16.6, 17.4);
+  } else if (t < 19.5) {
+    sub(t, [[17.5, 19.5, 'Утром вы поехали в деревню.']]);
+    fadeEl.style.opacity = 1; campLight.intensity = 0;
+  } else if (t < 25) {
+    // the starting cabin, covered in cobwebs
+    sub(t, [[19.5, 25, 'Это та самая хижина из начала… Всё заросло паутиной.']]);
+    unfade(19.5, 20.1);
+    actor.g.visible = true; boy.g.visible = true;
+    const k = clamp01((t - 19.5) / 4);
+    walkChar(actor, fv.set(15.5, 0, -2), fv2.set(16.2, 0, -8), k, t * 9);
+    walkChar(boy, fv.set(17.2, 0, -1.5), fv2.set(17.6, 0, -8.3), k, t * 10);
+    if (epi.withDog) { dog.g.position.set(16.9, 0, -2 - 6 * k); dog.g.rotation.set(0, Math.PI, 0); animateDog(dt, k < 1 ? 6 : 0, t); }
+    camera.position.set(12.5 + k * 1.5, 2.2, -4.5); camera.lookAt(18, 1.9, -13);
+  } else if (t < 29) {
+    // a walk; a huge cave
+    sub(t, [[25, 29, 'Вы решили прогуляться… и нашли огромную пещеру.']]);
+    const k = clamp01((t - 25) / 3.6);
+    walkChar(actor, fv.set(CAVE.x + 13, 0, CAVE.z - 4), fv2.set(CAVE.x + 8.5, 0, CAVE.z - 1), k, t * 9);
+    walkChar(boy, fv.set(CAVE.x + 14, 0, CAVE.z - 2.6), fv2.set(CAVE.x + 8.5, 0, CAVE.z + 1), k, t * 10);
+    if (epi.withDog) { dog.g.position.set(CAVE.x + 13.5 - 4.5 * k, 0, CAVE.z); dog.g.rotation.set(0, -Math.PI / 2, 0); animateDog(dt, k < 1 ? 6 : 0, t); }
+    monster.visible = true; monster.position.set(CAVE.x + 3.8, 0, CAVE.z); monster.rotation.set(0, Math.PI / 2, 0); monsterSit(true, T);
+    camera.position.set(CAVE.x + 18, 3.2, CAVE.z + 4); camera.lookAt(CAVE.x + 2, 2.4, CAVE.z);
+  } else if (t < 34) {
+    sub(t, [[29, 34, 'В пещере сидел тот самый монстр… и плакал.']]);
+    monster.position.set(CAVE.x + 3.8, 0, CAVE.z); monsterSit(true, T); monster.position.y = -0.9;
+    if (t > 29.3 && Math.floor(t / 1.6) !== epi.lastSob) { epi.lastSob = Math.floor(t / 1.6); noiseBurst(0.25, 0.15, 500); sob(); }
+    placeChar(actor, CAVE.x + 8.5, CAVE.z - 1, -Math.PI / 2); placeChar(boy, CAVE.x + 8.5, CAVE.z + 1, -Math.PI / 2); boyStandPose();
+    animateLimbs(actor, 0, 0, 0.05, 0, -0.15); animateLimbs(boy, 0, 0, 0.05, 0, -0.15);
+    camera.position.set(CAVE.x + 11, 2.0, CAVE.z + 2.8); camera.lookAt(CAVE.x + 3.8, 1.4, CAVE.z);
+  } else if (t < 39) {
+    // the boy pets him; he stops crying
+    sub(t, [[29, 36, 'Мальчик подошёл и погладил монстра…'], [36, 39, '…и монстр перестал плакать.']]);
+    const k = clamp01((t - 34) / 1.6);
+    walkChar(boy, fv.set(CAVE.x + 8.5, 0, CAVE.z + 1), fv2.set(CAVE.x + 6.0, 0, CAVE.z + 0.9), k, t * 10);
+    if (k >= 1) { boy.arms[1].sh.rotation.x = -2.4 + Math.sin(t * 6) * 0.25; boy.arms[1].el.rotation.x = -0.3; popHeart(fv.set(CAVE.x + 4, 2.2, CAVE.z), t); }
+    monster.position.set(CAVE.x + 3.8, 0, CAVE.z); monsterSit(t < 36, T); monster.position.y = -0.9;
+    camera.position.set(CAVE.x + 10, 2.0, CAVE.z + 3.6); camera.lookAt(CAVE.x + 4.4, 1.3, CAVE.z + 0.3);
+  } else if (t < 45) {
+    sub(t, [[39, 42, '— Когда-то я тоже был человеком…'], [42, 45, '— Но злая колдунья заколдовала меня, и я стал монстром.']]);
+    monster.position.set(CAVE.x + 3.8, 0, CAVE.z); monsterSit(false, T); monster.position.y = -0.9;
+    beast.jaw.rotation.x = 0.1 + Math.abs(Math.sin(t * 9)) * 0.2; // talking
+    beast.head.rotation.x = -0.6;
+    camera.position.set(CAVE.x + 7.6, 2.3, CAVE.z + 1.6); camera.lookAt(CAVE.x + 3.8, 2.0, CAVE.z);
+  } else if (t < 50) {
+    // the antidote
+    sub(t, [[45, 47.5, 'Вы с мальчиком сварили антидот!'], [47.5, 50, 'Мальчик дал его монстру…']]);
+    flask.visible = true;
+    const k = ease(clamp01((t - 47.5) / 1.8));
+    flask.position.set(CAVE.x + 5.6 - 1.6 * k, 0.2 + Math.sin(k * Math.PI) * 1.4 + k * 0.6, CAVE.z + 0.3 - 0.3 * k);
+    flask.rotation.y = t * 2;
+    monster.position.set(CAVE.x + 3.8, 0, CAVE.z); monsterSit(false, T); monster.position.y = -0.9;
+    camera.position.set(CAVE.x + 9, 2.2, CAVE.z + 3); camera.lookAt(CAVE.x + 4.8, 1.0, CAVE.z + 0.2);
+  } else if (t < 53.5) {
+    // flash — the monster becomes a man again
+    sub(t, [[50, 53.5, 'Монстр снова стал человеком!']]);
+    if (t < 50.6) { scareEl.style.background = '#fff'; scareEl.style.opacity = 1 - (t - 50) / 0.6; }
+    else scareEl.style.opacity = 0;
+    once('cure1', () => { chime(); monster.visible = false; flask.visible = false; exMan.g.visible = true; });
+    placeChar(exMan, CAVE.x + 3.8, CAVE.z, Math.PI / 2);
+    for (const [c, off] of [[exMan, 0], [actor, 1], [boy, 2]]) jumpChar(c, t, off);
+    popHeart(fv.set(CAVE.x + 5, 2.4, CAVE.z), t);
+    camera.position.set(CAVE.x + 10, 2.2, CAVE.z + 3.5); camera.lookAt(CAVE.x + 5.5, 1.2, CAVE.z);
+  } else if (t < 56) {
+    sub(t, [[53.5, 56, 'Вы все вместе пошли в город…']]);
+    fade(53.5, 54.2);
+  } else if (t < 62) {
+    // the giant spider in the city
+    sub(t, [[56, 58.6, 'В городе снова был монстр-паук!'], [58.6, 62, '— Его тоже заколдовала колдунья! — сказал человек.']]);
+    unfade(56, 56.6);
+    spider.g.visible = true; spider.g.scale.setScalar(1); spider.g.position.set(0, 0, 139.5); spider.g.rotation.set(0, Math.PI, 0);
+    spider.phase += dt * 2; poseSpider(spider, spider.phase, 0.3, 0); spider.eyeM.emissiveIntensity = 3;
+    placeChar(actor, -1.2, 131.5, 0); placeChar(boy, 0.2, 131.2, 0); placeChar(exMan, 1.6, 131.6, 0);
+    for (const c of [actor, boy, exMan]) animateLimbs(c, 0, 0, 0.05, 0, -0.15);
+    if (t > 58.6) { exMan.arms[1].sh.rotation.x = -1.5; }
+    if (epi.withDog) { dog.g.position.set(-0.5, 0, 130.4); dog.g.rotation.set(0, 0, 0); animateDog(dt, 0, t); }
+    camera.position.set(-4.5, 2.4, 127); camera.lookAt(0.5, 1.4, 136);
+  } else if (t < 66) {
+    sub(t, [[62, 66, 'Антидот! Паук превратился в маленького паучка.']]);
+    flask.visible = t < 63.4;
+    const k = ease(clamp01((t - 62) / 1.4));
+    flask.position.set(0.2, 1.2 + Math.sin(k * Math.PI) * 2, 131.5 + 7.5 * k); flask.rotation.y = t * 3;
+    if (t > 63.4) {
+      once('cure2', () => { chime(); scareEl.style.background = '#fff'; });
+      scareEl.style.opacity = Math.max(0, 1 - (t - 63.4) / 0.6);
+      const s = 1 - 0.9 * ease(clamp01((t - 63.4) / 1.2));
+      spider.g.scale.setScalar(s); spider.eyeM.emissiveIntensity = 1;
+    }
+    spider.phase += dt * 3; poseSpider(spider, spider.phase, 0.4, 0);
+    camera.position.set(-4.5, 2.4, 127); camera.lookAt(0.5, 1.0, 137);
+  } else if (t < 71) {
+    // everyone celebrates
+    sub(t, [[66, 71, 'Все радовались: человек, мальчик, ' + (epi.withDog ? 'чихуахуа, ' : '') + (epi.withEagle ? 'орёл, ' : '') + 'маленький паучок и ты!']]);
+    scareEl.style.opacity = 0;
+    spider.g.scale.setScalar(0.1); spider.g.position.set(0.4, 0, 133.6); spider.g.rotation.set(0, Math.PI, 0);
+    spider.phase += dt * 12; poseSpider(spider, spider.phase, 1, 0);
+    for (const [c, off] of [[actor, 0], [boy, 1.3], [exMan, 2.4]]) jumpChar(c, t, off);
+    if (epi.withDog) { dog.g.position.set(-0.4, Math.abs(Math.sin(t * 8)) * 0.3, 132.6); dog.g.rotation.set(0, Math.PI, 0); animateDog(dt, 0, t); dog.tail.rotation.z = Math.sin(t * 16) * 0.7; }
+    if (epi.withEagle) { eagle.g.visible = true; const a = t * 1.3; eagle.g.position.set(Math.cos(a) * 3.5, 4.2, 132.5 + Math.sin(a) * 3.5); eagle.g.rotation.set(0, -a, -0.3); flapEagle(eagle, t, 7, 0.5); }
+    popHeart(fv.set(0, 2.6, 132), t);
+    camera.position.set(0.5, 2.1, 137.5); camera.lookAt(0, 1.0, 131.8);
+    fade(70.3, 71);
+  } else if (t < 80) {
+    // the amusement park
+    sub(t, [[71, 80, '…и все вместе пошли в парк аттракционов!']]);
+    unfade(71, 71.6);
+    ferris.rotation.z = T * 0.15; for (const g of ferris.gondolas) g.rotation.z = -ferris.rotation.z;
+    carousel.rotation.y = T * 0.6; carHorses.forEach((h, i) => { h.position.y = 1.3 + Math.sin(T * 3 + i) * 0.3; });
+    const k = clamp01((t - 71) / 7);
+    const chars = [[actor, -1.2], [boy, 0], [exMan, 1.2]];
+    for (const [c, x] of chars) { walkChar(c, fv.set(PARK.x + x, 0, PARK.z + 24), fv2.set(PARK.x + x, 0, PARK.z + 6), k, t * 9 + x); c.g.rotation.y = Math.PI; }
+    if (epi.withDog) { dog.g.position.set(PARK.x - 0.6, 0, PARK.z + 23 - 18 * k); dog.g.rotation.set(0, Math.PI, 0); animateDog(dt, 6, t); }
+    spider.g.position.set(PARK.x + 0.6, 0, PARK.z + 23.2 - 18 * k); spider.g.rotation.set(0, Math.PI, 0); spider.phase += dt * 12; poseSpider(spider, spider.phase, 1, 0);
+    if (epi.withEagle) { const a = t * 1.1; eagle.g.position.set(PARK.x + Math.cos(a) * 3, 5, PARK.z + 18 - 18 * k + Math.sin(a) * 3); eagle.g.rotation.set(0, -a, -0.3); flapEagle(eagle, t, 7, 0.5); }
+    camera.position.set(PARK.x + 3, 2.6, PARK.z + 30 - 6 * k); camera.lookAt(PARK.x - 2, 5, PARK.z - 10);
+  } else finishEpilogue();
 }
 
 // ---------- graphics settings ----------
@@ -2545,11 +2916,11 @@ addEventListener('resize', resize);
 let lastT = performance.now();
 function loop(now) {
   const dt = Math.min((now - lastT) / 1000, 0.05); lastT = now;
-  if (cut.on) updateCutscene(dt, now); else if (tower.on) updateTower(dt, now); else if (ending.on) updateEnding(dt, now); else if (!paused) update(dt);
+  if (cut.on) updateCutscene(dt, now); else if (tower.on) updateTower(dt, now); else if (ending.on) updateEnding(dt, now); else if (epi.on) updateEpilogue(dt, now); else if (!paused) update(dt);
   animateWorld(now / 1000);
   fpsFrames++;
   if (now - fpsT > 500) { fpsEl.textContent = 'FPS ' + Math.round(fpsFrames * 1000 / (now - fpsT)); fpsFrames = 0; fpsT = now; }
-  if (!cut.on && !tower.on && !ending.on) {
+  if (!cut.on && !tower.on && !ending.on && !epi.on) {
     camera.position.set(me.x, (hidden ? 0.85 : EYE) + Math.sin(bob) * 0.05, me.z);
     camera.rotation.set(me.pitch + (Math.random() - 0.5) * shake, me.yaw + (Math.random() - 0.5) * shake, Math.sin(bob * 0.5) * 0.012 + (Math.random() - 0.5) * shake);
   }
