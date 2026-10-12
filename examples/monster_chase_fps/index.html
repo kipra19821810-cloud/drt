@@ -1420,6 +1420,7 @@ function update(dt) {
   bob = moving ? bob + dt * (sprint ? 14 : 9) : bob * 0.9;
 
   let mSpeed = 3.6 + time * 0.12;
+  if (stage === 'final') mSpeed = Math.min(3 + (time - finalStart) * 0.08, 9); // back in the forest: starts slow, speeds up little by little
   if (stage === 'forest' && gateTarget) mSpeed = Math.min(mSpeed * 0.5, 4.2); // worn out while you run for the gate (you walk at 5)
   const mx = me.x - monster.position.x, mz = me.z - monster.position.z, d = Math.hypot(mx, mz);
   if (stun > 0) {
@@ -1687,7 +1688,7 @@ spider.hitbox = new THREE.Mesh(new THREE.BoxGeometry(3, 1.5, 3.4), new THREE.Mes
 spider.hitbox.position.set(0, 1.0, -0.3); spider.hitbox.visible = false; spider.g.add(spider.hitbox);
 spider.active = false; spider.stun = 0; spider.t = 0; spider.flash = 0; spider.wx = 0; spider.wz = 0;
 const spiderSmall = makeSpider(); spiderSmall.g.scale.setScalar(0.09); spiderSmall.g.visible = false; scene.add(spiderSmall.g);
-let stage = 'forest', gateTarget = 0, gateK = 0, monsterIdle = false, scareBy = 'monster';
+let finalStart = 0, stage = 'forest', gateTarget = 0, gateK = 0, monsterIdle = false, scareBy = 'monster';
 const goalEl = document.getElementById('goal'), goalText = document.getElementById('goal-text'), goalArrow = document.getElementById('goal-arrow');
 
 function playerZones() {
@@ -1720,7 +1721,7 @@ function updateStage(dt) {
   } else if (stage === 'escape') {
     setGoal('Беги обратно в лес!', 0, -ARENA + 4);
     if (me.z > -ARENA + 1) {
-      stage = 'final'; monsterIdle = false; nav.detour = 0; nav.best = Infinity; nav.since = 0;
+      stage = 'final'; finalStart = time; spider.t = 0; monsterIdle = false; nav.detour = 0; nav.best = Infinity; nav.since = 0;
       const side = me.x > 0 ? -1 : 1;
       monster.position.set(side * rnd(12, 20), 0, rnd(-10, 10)); pushOut(monster.position, 0.9, monsterZones());
       toast('Теперь за тобой гонятся ДВА монстра!', 4);
@@ -1738,7 +1739,7 @@ function updateSpider(dt) {
     poseSpider(sp, sp.phase + Math.sin(time * 30) * 0.05, 0.1, 0.7);
     sp.eyeM.emissiveIntensity = 0.4;
   } else {
-    const speed = 3.5 + sp.t * 0.06;
+    const speed = stage === 'final' ? Math.min(3 + sp.t * 0.08, 9) : 3.5 + sp.t * 0.06;
     let tx = dx, tz = dz, td = d;
     if (hidden) { // can't see you either: skitters around nearby
       let wx = sp.wx - g.position.x, wz = sp.wz - g.position.z;
