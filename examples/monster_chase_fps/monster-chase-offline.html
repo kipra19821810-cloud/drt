@@ -14,7 +14,8 @@
     --body: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
     color-scheme: dark;
   }
-  html, body { height: 100%; }
+  html, body { height: 100%; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+  .over { touch-action: pan-y; }
   [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; }
   #game { position: fixed; inset: 0; touch-action: none; }
@@ -86,7 +87,7 @@
 <button class="hidebtn" id="hidebtn" type="button" hidden>Спрятаться</button>
 <button class="hidebtn actbtn" id="actbtn" type="button" hidden>Взять ключ</button>
 <canvas class="leaves" id="leaves" hidden></canvas>
-<div class="hud"><span id="time">0.0 с</span><span class="right"><span id="hides">Кусты: 2</span><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><span id="fps" hidden></span><button id="snd" type="button">Звук: вкл</button><button id="opts" type="button">Настройки</button></span></div>
+<div class="hud"><span id="time">0.0 с</span><span class="right"><span id="hides">Кусты: 2</span><span id="ammo">6/6</span><span id="best"></span><span class="stam" title="Выносливость"><i id="stam"></i></span><span id="fps" hidden></span><button id="snd" type="button">Звук: вкл</button><button id="opts" type="button">Настройки</button><button id="fs" type="button">На весь экран</button></span></div>
 <p class="hint"><kbd>WASD</kbd> — идти, мышь — смотреть, клик, <kbd>Пробел</kbd> или кнопка «Огонь» — выстрел, <kbd>E</kbd> у куста — спрятаться (2 раза, до 10 с), <kbd>R</kbd> — перезарядка, <kbd>Shift</kbd> — бег. Попадание замораживает монстра на 3 секунды. Продержись 60 секунд — откроются ворота.</p>
 <div class="over" id="start">
   <div class="card">
@@ -95,6 +96,7 @@
     <p>С тобой храбрая чихуахуа. Она бежит впереди, тявкает, когда монстр рядом, и один раз спасёт тебя: запрыгнет ему на голову и сделает массаж.</p>
     <p><strong>Осторожно:</strong> если он поймает, будет громкий скример.</p>
     <button id="go" type="button">Начать</button>
+    <button id="fs2" class="ghost" type="button">На весь экран</button>
     <button id="opts2" class="ghost" type="button">Настройки графики</button>
   </div>
 </div>
@@ -1461,7 +1463,32 @@ function updateHiding(dt) {
   for (const b of bushes) if (b.shake > 0) { b.shake -= dt; b.g.rotation.z = Math.sin(b.shake * 60) * 0.08 * b.shake; }
 }
 function lockMouse() { try { const r = renderer.domElement.requestPointerLock && renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
-function begin() { startCutscene(); }
+// ---------- full screen ----------
+function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function goFull(quiet) {
+  if (isFull()) return;
+  const el = document.documentElement, fn = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!fn) { if (!quiet) toast('Здесь полный экран недоступен. Открой игру по ссылке в Chrome.', 4); return; }
+  try {
+    const r = fn.call(el, { navigationUI: 'hide' });
+    if (r && r.catch) r.catch(() => { if (!quiet) toast('Браузер не разрешил полный экран. Открой игру по ссылке в Chrome.', 4); });
+  } catch (e) { if (!quiet) toast('Браузер не разрешил полный экран. Открой игру по ссылке в Chrome.', 4); }
+}
+function toggleFull(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  if (isFull()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } else goFull(false);
+}
+for (const id of ['fs', 'fs2']) {
+  const b = document.getElementById(id);
+  b.addEventListener('click', toggleFull);
+  b.addEventListener('pointerdown', e => e.stopPropagation());
+}
+function syncFsLabel() { const t = isFull() ? 'Обычный экран' : 'На весь экран'; document.getElementById('fs').textContent = t; document.getElementById('fs2').textContent = t; setTimeout(resize, 100); }
+document.addEventListener('fullscreenchange', syncFsLabel); document.addEventListener('webkitfullscreenchange', syncFsLabel);
+// keep finger swipes inside the game (only the menus may scroll)
+document.addEventListener('touchmove', e => { if (!e.target.closest || !e.target.closest('.over')) e.preventDefault(); }, { passive: false });
+
+function begin() { if (TOUCH) goFull(true); startCutscene(); }
 document.getElementById('go').addEventListener('click', begin);
 const fireBtn = document.getElementById('fire');
 fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); initAudio(); shoot(); });
