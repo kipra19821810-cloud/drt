@@ -93,6 +93,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
 .net-code input:focus-visible { outline: 2px solid var(--portal); outline-offset: 1px; }
 .net-chip { color: var(--portal) !important; font-size: 15px !important; font-weight: 600; letter-spacing: 0.04em; }
 .net-chip b { font-size: 20px; letter-spacing: 0.14em; color: var(--ink); }
+.net-badge { display: inline-flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border: 1px solid rgba(85,200,255,0.6); border-radius: 4px; color: var(--dim); font-size: 13px; }
+.net-badge b { font: 600 26px var(--f-mono); letter-spacing: 0.18em; color: var(--portal); }
 .net-big { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border: 1px solid rgba(85,200,255,0.55); border-radius: 4px; color: var(--dim); font-size: 13px; }
 .net-big b { font: 600 30px var(--f-mono); letter-spacing: 0.18em; color: var(--portal); }
 .mc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
@@ -210,6 +212,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     <div class="w-head"><b>Игра по сети</b><span id="netInfo">проверяем, можно ли играть вместе…</span></div>
     <div class="mc-row" id="netRow">
       <button class="btn primary" id="bHost" type="button" disabled>Создать игру</button>
+      <span class="net-badge" id="netBadge" hidden><span>Код</span><b id="netBadgeCode"></b><button class="btn" id="bCopyCode2" type="button">Скопировать</button></span>
       <label class="net-code"><span>Код</span><input id="netCode" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="AB3K" disabled></label>
       <button class="btn" id="bJoin" type="button" disabled>Войти</button>
       <button class="btn" id="bLeave" type="button" hidden>Выйти из сетевой игры</button>
@@ -2045,7 +2048,9 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   function setNetUi() {
     const on = !!net.room;
-    $("bHost").hidden = $("bJoin").hidden = on; $("netCode").closest("label").hidden = on; $("bLeave").hidden = !on;
+    $("bJoin").hidden = on; $("netCode").closest("label").hidden = on; $("bLeave").hidden = !on;
+    $("bHost").hidden = on && net.role !== "host"; $("bHost").disabled = on || !net.lobby; $("bHost").textContent = on ? "Игра создана" : "Создать игру";
+    $("netBadge").hidden = !on; $("netBadgeCode").textContent = net.code.toUpperCase();
     const chip = $("tNet"); chip.hidden = !on; $("pauseNet").hidden = !on;
     if (on) {
       const n = net.room.peers().length || 1;
@@ -2207,12 +2212,13 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   });
   $("netCode").addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") $("bJoin").click(); });
   $("bLeave").addEventListener("click", netLeave);
-  $("bCopyCode").addEventListener("click", () => {
-    const done = () => ($("bCopyCode").textContent = "Скопировано");
-    try { navigator.clipboard.writeText(net.code).then(done, () => window.getSelection().selectAllChildren($("pauseCode"))); }
-    catch (e) { window.getSelection().selectAllChildren($("pauseCode")); }
-    setTimeout(() => ($("bCopyCode").textContent = "Скопировать"), 2000);
-  });
+  function copyCode(btnId, codeId) {
+    const btn = $(btnId), sel = () => window.getSelection().selectAllChildren($(codeId));
+    try { navigator.clipboard.writeText(net.code.toUpperCase()).then(() => (btn.textContent = "Скопировано"), sel); } catch (e) { sel(); }
+    setTimeout(() => (btn.textContent = "Скопировать"), 2000);
+  }
+  $("bCopyCode").addEventListener("click", () => copyCode("bCopyCode", "pauseCode"));
+  $("bCopyCode2").addEventListener("click", () => copyCode("bCopyCode2", "netBadgeCode"));
   netInit();
 
   // ---------- game flow ----------
