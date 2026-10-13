@@ -744,7 +744,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function killMonster(i, silent) {
     const m = monsters[i];
     scene.remove(m.g); m.mats.forEach((mm) => mm.dispose());
-    if (!silent) { burst(m.x, m.y + m.h / 2, m.z, m.type.face[0], 18, 5); kills++; if (survival() && m.hitByPlayer) loot(m.type.id); if (m.type.id === "digit7") playSound("kill7"); }
+    if (!silent) { burst(m.x, m.y + m.h / 2, m.z, m.type.face[0], 18, 5); kills++; if (survival() && m.hitByPlayer) loot(m.type.id); if (m.type.id === "digit7") playSound("kill7"); if (m.type.id === "digit6") playSound("kill6"); }
     monsters.splice(i, 1);
   }
   function hurtMonster(m, dmg, fx, fz, power) {
@@ -1970,6 +1970,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   sounds.break = loadSound("sound67.mp3");
   sounds.boom = loadSound("boom67.mp3");
   sounds.kill7 = loadSound("kill7.mp3"); // plays when the 7 character is defeated
+  sounds.kill6 = loadSound("kill6.mp3"); // plays when the 6 character is defeated
   function playSound(name) {
     const s = sounds[name];
     try {
