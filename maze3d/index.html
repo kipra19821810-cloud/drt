@@ -69,6 +69,16 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
 .size b { font-family: var(--f-display); font-size: 24px; font-weight: 700; }
 .size span { font-family: var(--f-mono); font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .size.big { border-color: rgba(242,165,65,0.6); }
+.worlds { display: grid; gap: 12px; }
+.world { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,255,255,0.02); }
+.w-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.w-head b { font-family: var(--f-display); font-size: 28px; }
+.w-head span { color: var(--dim); font-size: 13px; }
+.world.mc { border-color: rgba(110,170,80,0.6); }
+.mc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.mc-row .size { flex-direction: row; align-items: center; gap: 12px; }
+.mc-txt { display: flex; flex-direction: column; gap: 4px; }
+.mc-row canvas { width: 40px; height: 40px; image-rendering: pixelated; flex: none; }
 .controls { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 13px; color: var(--dim); }
 .controls dt { font-family: var(--f-mono); color: var(--stone); font-size: 12px; }
 .controls dd { margin: 0; }
@@ -145,17 +155,27 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   <div class="panel">
     <div class="eyebrow">Утро · песочница от первого лица</div>
     <h1>Каменный лабиринт</h1>
-    <p class="lead">Над лабиринтом встаёт солнце. Стройте из блоков лестницы и стены, взрывайте проходы динамитом и призывайте монстров: они найдут вас по коридорам. Выход отмечен голубым маяком.</p>
+    <p class="lead">Выберите мир. В лабиринте нужно найти выход под голубым маяком. В мире Minecraft можно копать, строить и исследовать холмы, леса и озёра. В обоих мирах есть блоки, динамит, полёт и монстры.</p>
+    <div class="worlds">
+    <div class="world">
+    <div class="w-head"><b>Каменный лабиринт</b><span>утро, выход, монстры ищут вас по коридорам</span></div>
     <div class="sizes">
       <button class="size" type="button" data-n="12"><b>Малый</b><span>25 × 25 клеток</span><span class="best" data-best="12">рекорда нет</span></button>
       <button class="size" type="button" data-n="25"><b>Большой</b><span>51 × 51 клеток</span><span class="best" data-best="25">рекорда нет</span></button>
       <button class="size big" type="button" data-n="45"><b>Огромный</b><span>91 × 91 клеток</span><span class="best" data-best="45">рекорда нет</span></button>
+    </div>
+    </div>
+    <div class="world mc">
+    <div class="w-head"><b>Minecraft</b><span>холмы, леса, озёра, руды в глубине · 128 × 128 блоков</span></div>
+    <div class="mc-row"><button class="size" type="button" id="bMC"><canvas id="mcIcon" width="32" height="32"></canvas><div class="mc-txt"><b>Войти в мир</b><span>каждый раз новый</span></div></button></div>
+    </div>
     </div>
     <dl class="controls">
       <dt>WASD · Пробел</dt><dd>идти и прыгать: в воздухе можно прыгнуть ещё раз, зажатый пробел — прыжки подряд. Shift — бежать</dd>
       <dt>V или 2× Пробел</dt><dd>полёт: Пробел — вверх, C — вниз, Shift — быстрее</dd>
       <dt>ЛКМ или E</dt><dd>поставить блок или призвать монстра туда, куда смотрите</dd>
       <dt>ПКМ или F</dt><dd>ударить монстра или сломать поставленный блок</dd>
+      <dt>Мир Minecraft</dt><dd>как в оригинале: ЛКМ — ломать и бить (можно зажать), ПКМ — ставить, в воде Пробел — плыть вверх</dd>
       <dt>1–8 · колесо · Q</dt><dd>выбрать блок или монстра · переключить блоки и монстров</dd>
       <dt>M · H · Esc</dt><dd>карта · подсказка (+20 с) · пауза</dd>
       <dt>Телефон</dt><dd>левая половина — джойстик, правая — обзор, кнопки справа</dd>
@@ -175,8 +195,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       <button class="btn" id="bClearBlocks" type="button">Убрать блоки</button>
     </div>
     <div class="row">
-      <button class="btn" id="bRestart" type="button">Новый лабиринт</button>
-      <button class="btn" id="bMenu" type="button">В меню</button>
+      <button class="btn" id="bRestart" type="button">Новый мир</button>
+      <button class="btn" id="bMenu" type="button">Сменить мир</button>
     </div>
   </div>
 </div>
@@ -231,16 +251,17 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   scene.add(camera);
 
   const SUN_DIR = new THREE.Vector3(0.75, 0.38, 0.45).normalize(); // low morning sun in the east
+  const skyU = { sunDir: { value: SUN_DIR }, zen: { value: new THREE.Color(0.42, 0.62, 0.86) }, hor: { value: new THREE.Color(0.98, 0.85, 0.70) } };
   {
     const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { sunDir: { value: SUN_DIR } },
+      uniforms: skyU,
       vertexShader: "varying vec3 vW; void main(){ vW = (modelMatrix*vec4(position,1.)).xyz; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }",
       fragmentShader: [
-        "uniform vec3 sunDir; varying vec3 vW;",
+        "uniform vec3 sunDir; uniform vec3 zen; uniform vec3 hor; varying vec3 vW;",
         "void main(){",
         " vec3 d = normalize(vW - cameraPosition); float h = d.y;",
-        " vec3 zen = vec3(0.42,0.62,0.86), hor = vec3(0.98,0.85,0.70), low = vec3(0.91,0.86,0.79);",
+        " vec3 low = hor * 0.93;",
         " vec3 c = h > 0. ? mix(hor, zen, pow(h, 0.55)) : low;",
         " float s = max(dot(d, sunDir), 0.);",
         " c += vec3(1.0,0.72,0.42) * pow(s, 6.) * 0.35 + vec3(1.0,0.95,0.85) * smoothstep(0.9975, 0.999, s);",
@@ -424,6 +445,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   let elapsed = 0, dist = 0, hints = 0, kills = 0, hintUntil = 0, hintPath = [], bob = 0, shake = 0;
   let mode = "blocks", selBlock = 0, selMob = 0, aggressive = true;
   let flying = false, airJumps = 1, lastSpace = 0, touchUp = false, touchDown = false;
+  let worldKind = "maze", holdBtn = -1, holdT = 0, underwater = false;
+  const spawn = { x: 0, y: 0, z: 0 };
   const blocks = new Map(); // voxel key -> block type index
   let tnts = []; // {k, x, y, z, t}
   let monsters = [], particles = [], flashes = [];
@@ -477,8 +500,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function disposeWorld() {
     if (!world) return;
     scene.remove(world);
-    world.traverse((o) => { if (o.geometry && o.geometry !== unitBox) o.geometry.dispose(); if (o.material && o.material !== wallMat && o.material !== floorMat) o.material.dispose(); });
-    world = null;
+    world.traverse((o) => { if (o.geometry && o.geometry !== unitBox) o.geometry.dispose(); if (o.material && o.material !== wallMat && o.material !== floorMat && !o.material.userData.keep) o.material.dispose(); });
+    world = null; exitGroup = null; hintDots = null;
   }
   function writeWalls() {
     const m = new THREE.Matrix4(); let k = 0;
@@ -519,6 +542,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   // ---------- voxel queries ----------
   function solidType(ix, iy, iz) {
     // 0 = air, -1 = floor / maze wall / outside, 1+ = placed block index + 1
+    if (worldKind === "mc") return mcSolid(ix, iy, iz);
     if (iy < 0) return -1;
     const gx = Math.floor(ix / S), gz = Math.floor(iz / S);
     if (gx < 0 || gz < 0 || gx >= G || gz >= G) return -1;
@@ -633,6 +657,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     const fl = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.85, depthWrite: false }));
     fl.position.set(cx, cy, cz); scene.add(fl); flashes.push({ m: fl, t: 0 });
     burst(cx, cy, cz, 0xff8a2a, 26, 7); burst(cx, cy, cz, 0x55524c, 20, 6);
+    if (worldKind === "mc") mcBlast(cx, cy, cz);
+    else {
     const touched = new Set(); let walls = false;
     for (let x = Math.floor(cx - 3); x <= cx + 3; x++) for (let y = Math.floor(cy - 3); y <= cy + 3; y++) for (let z = Math.floor(cz - 3); z <= cz + 3; z++) {
       if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz) > 3.2) continue;
@@ -648,6 +674,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       if (Math.hypot(cc(gx) - cx, WALL_H / 2 - cy, cc(gz) - cz) < 3.4) { grid[idx(gx, gz)] = 0; seen[idx(gx, gz)] = 1; walls = true; burst(cc(gx), 1.5, cc(gz), 0x8a7d68, 14, 5); }
     }
     if (walls) { writeWalls(); distExit = bfs(exitCell[0], exitCell[1]); distPCell = -1; }
+    }
     monsters.forEach((m) => { const d = Math.hypot(m.x - cx, m.y + m.h / 2 - cy, m.z - cz); if (d < 4.5) hurtMonster(m, d < 2.5 ? 10 : 5, cx, cz, 10); });
     const pd = Math.hypot(player.x - cx, player.y + 1 - cy, player.z - cz);
     if (pd < 4.5) hurtPlayer(pd < 2.5 ? 4 : 2, cx, cz, 9);
@@ -663,11 +690,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     $("hurt").style.opacity = "1"; setTimeout(() => ($("hurt").style.opacity = "0"), 160);
     shake = Math.max(shake, 0.25);
     if (player.hp <= 0) {
-      Object.assign(player, { hp: 10, vy: 0, kx: 0, kz: 0, x: cc(startCell[0]), z: cc(startCell[1]), y: 0 });
+      Object.assign(player, { hp: 10, vy: 0, kx: 0, kz: 0, x: spawn.x, z: spawn.z, y: spawn.y });
       toast("Вы погибли и вернулись на старт");
     }
   }
   function reveal() {
+    if (worldKind === "mc") return;
     const cx = Math.floor(player.x / S), cy = Math.floor(player.z / S);
     if (cx < 0 || cy < 0 || cx >= G || cy >= G) return;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = cx + dx, y = cy + dy; if (x >= 0 && y >= 0 && x < G && y < G) seen[idx(x, y)] = 1; }
@@ -697,9 +725,15 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (mode === "blocks") {
       if (!hit) { toast("Слишком далеко, подойдите ближе"); return; }
       const { px, py, pz } = hit;
-      if (py > 40 || solidType(px, py, pz) !== 0) return;
+      if (py > (worldKind === "mc" ? MC_H - 1 : 40) || solidType(px, py, pz) !== 0) return;
       const overlaps = (e) => px + 1 > e.x - e.r && px < e.x + e.r && pz + 1 > e.z - e.r && pz < e.z + e.r && py + 1 > e.y && py < e.y + e.h;
       if (overlaps(player) || monsters.some((m) => !m.type.fly && overlaps(m))) return;
+      if (worldKind === "mc") {
+        const id = MC_ITEMS[selBlock];
+        mcSet(px, py, pz, id);
+        if (id === MC_TNT) { tnts.push({ k: vkey(px, py, pz), x: px, y: py, z: pz, t: 3 }); toast("Динамит взорвётся через 3 секунды"); }
+        return;
+      }
       if (blocks.size >= MAX_BLOCKS * 0.9) { toast("Слишком много блоков"); return; }
       setBlock(px, py, pz, selBlock);
       if (selBlock === TNT) toast("Динамит взорвётся через 3 секунды");
@@ -725,7 +759,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     }
     if (best) { hurtMonster(best, 2, player.x, player.z, 7); burst(best.x, best.y + best.h * 0.6, best.z, 0xffffff, 4, 2); return; }
     if (hit && hit.t <= 4.5) {
-      if (hit.type > 0) { const b = hit.type - 1; setBlock(hit.x, hit.y, hit.z, null); burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, b === TNT ? 0xc4302a : 0x9a8f80, 8, 3); }
+      if (hit.type > 0 && worldKind === "mc") {
+        const k = vkey(hit.x, hit.y, hit.z); tnts = tnts.filter((q) => q.k !== k);
+        burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, MCB[hit.type].color, 8, 3); mcSet(hit.x, hit.y, hit.z, 0);
+      }
+      else if (hit.type < 0 && worldKind === "mc") toast("Бедрок не ломается");
+      else if (hit.type > 0) { const b = hit.type - 1; setBlock(hit.x, hit.y, hit.z, null); burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, b === TNT ? 0xc4302a : 0x9a8f80, 8, 3); }
       else if (hit.y >= 0) toast("Стены лабиринта прочные. Их берёт только динамит");
     }
   }
@@ -743,11 +782,11 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   const mobIcons = MONSTERS.map((m) => faceIcon(m.face, m.id));
   function renderHotbar() {
-    const list = mode === "blocks" ? BLOCKS : MONSTERS, sel = mode === "blocks" ? selBlock : selMob;
+    const list = mode === "blocks" ? blockList() : MONSTERS, sel = mode === "blocks" ? selBlock : selMob;
     const wrap = $("slots"); wrap.innerHTML = "";
     list.forEach((it, i) => {
       const b = document.createElement("button"); b.type = "button"; b.className = "slot" + (i === sel ? " on" : ""); b.title = it.name; b.setAttribute("aria-label", it.name);
-      const c = document.createElement("canvas"); c.width = c.height = 32; c.getContext("2d").drawImage(mode === "blocks" ? it.icon : mobIcons[i], 0, 0);
+      const c = document.createElement("canvas"); c.width = c.height = 32; c.getContext("2d").drawImage(mode === "blocks" ? it.icon : mobIcons[i], 0, 0, 32, 32);
       const s = document.createElement("span"); s.textContent = i + 1;
       b.append(c, s); b.addEventListener("click", () => select(i)); wrap.append(b);
     });
@@ -756,7 +795,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     updateHand();
   }
   function select(i) {
-    if (mode === "blocks") { if (i < BLOCKS.length) selBlock = i; } else if (i < MONSTERS.length) selMob = i;
+    if (mode === "blocks") { if (i < blockList().length) selBlock = i; } else if (i < MONSTERS.length) selMob = i;
     renderHotbar();
   }
   function toggleFly() {
@@ -772,29 +811,287 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   hand.scale.setScalar(0.17); hand.position.set(0.36, -0.3, -0.6); hand.rotation.set(0.3, 0.6, 0);
   camera.add(hand);
   let swing = 0;
-  function updateHand() { hand.visible = mode === "blocks" && state !== "menu"; hand.material = BLOCKS[selBlock].mat; }
+  function updateHand() { hand.visible = mode === "blocks" && state !== "menu"; hand.material = blockList()[selBlock].mat; }
+  function blockList() { return worldKind === "mc" ? MC_LIST : BLOCKS; }
+
+  // ---------- Minecraft world ----------
+  const MC_W = 128, MC_H = 48, CH = 16, SEA = 14;
+  const WATER = 18, BEDROCK = 17, MC_TNT = 8, LEAVES = 12;
+  let vox = new Uint8Array(0), mcChunks = [], clouds = null;
+  const vi = (x, y, z) => (y * MC_W + z) * MC_W + x;
+  function mcGet(x, y, z) { if (x < 0 || z < 0 || x >= MC_W || z >= MC_W || y < 0 || y >= MC_H || !vox.length) return 0; return vox[vi(x, y, z)]; }
+  function mcSolid(x, y, z) {
+    if (y < 0 || x < 0 || z < 0 || x >= MC_W || z >= MC_W) return -1;
+    if (y >= MC_H) return 0;
+    const v = vox[vi(x, y, z)];
+    if (v === 0 || v === WATER) return 0;
+    return v === BEDROCK ? -1 : v;
+  }
+
+  function ore(c) {
+    return pix((x, n) => {
+      x.drawImage(C.stone, 0, 0);
+      for (let i = 0; i < 6; i++) { const a = rnd(3, n - 6) | 0, b = rnd(3, n - 6) | 0; x.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; x.fillRect(a, b, 3, 2); x.fillRect(a + 1, b + 1, 2, 2); }
+    });
+  }
+  const C2 = {
+    sand: pix((x, n) => speckle(x, n, [219, 207, 160], 10)),
+    logSide: pix((x, n) => { speckle(x, n, [104, 80, 48], 10); x.fillStyle = "rgba(50,35,18,0.6)"; for (let i = 1; i < n; i += 4) x.fillRect(i + (Math.random() * 2 | 0), 0, 1, n); }),
+    logTop: pix((x, n) => { speckle(x, n, [170, 136, 82], 8); x.strokeStyle = "#7a5a32"; for (let r = 3; r < 16; r += 4) x.strokeRect(16 - r + 0.5, 16 - r + 0.5, r * 2 - 1, r * 2 - 1); x.strokeStyle = "#5a4024"; x.lineWidth = 2; x.strokeRect(1, 1, n - 2, n - 2); }),
+    leaves: pix((x, n) => { for (let y = 0; y < n; y++) for (let i = 0; i < n; i++) { if (Math.random() < 0.2) continue; const v = rnd(-25, 25); x.fillStyle = `rgb(${58 + v | 0},${122 + v | 0},${40 + v | 0})`; x.fillRect(i, y, 1, 1); } }),
+    cobble: pix((x, n) => { speckle(x, n, [112, 112, 110], 12); x.fillStyle = "#4a4a48"; for (let i = 0; i < 10; i++) { x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(4, 9) | 0, 1); x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, 1, rnd(4, 9) | 0); } x.fillStyle = "rgba(210,210,210,0.35)"; for (let i = 0; i < 12; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, 3, 2); }),
+    coal: ore([28, 28, 28]), iron: ore([216, 175, 147]), diamond: ore([92, 219, 213]),
+    bedrock: pix((x, n) => speckle(x, n, [70, 70, 70], 40)),
+    water: pix((x, n) => { speckle(x, n, [48, 96, 200], 14); x.fillStyle = "rgba(255,255,255,0.2)"; for (let i = 0; i < 10; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(3, 7) | 0, 1); }),
+  };
+  const TILES = ["stone", "planks", "grassTop", "grassSide", "dirt", "glass", "gold", "glow", "lava", "tntSide", "tntTop", "sand", "logSide", "logTop", "leaves", "cobble", "coal", "iron", "diamond", "bedrock", "water"];
+  const tileSrc = Object.assign({ stone: C.stone, planks: C.wood, grassTop: C.grassTop, grassSide: C.grassSide, dirt: C.dirt, glass: C.glass, gold: C.gold, glow: C.glow, lava: C.lava, tntSide: C.tntSide, tntTop: C.tntTop }, C2);
+  const AT_C = 8, AT_R = 4, tileIdx = {};
+  const atlasCanvas = document.createElement("canvas"); atlasCanvas.width = AT_C * 32; atlasCanvas.height = AT_R * 32;
+  { const g = atlasCanvas.getContext("2d"); TILES.forEach((t, i) => { tileIdx[t] = i; g.drawImage(tileSrc[t], (i % AT_C) * 32, Math.floor(i / AT_C) * 32); }); }
+  const atlas = new THREE.CanvasTexture(atlasCanvas);
+  atlas.encoding = THREE.sRGBEncoding; atlas.magFilter = atlas.minFilter = THREE.NearestFilter; atlas.generateMipmaps = false;
+
+  const MCB = [];
+  const def = (id, name, top, side, bottom, kind, color) => (MCB[id] = { name, t: [tileIdx[top], tileIdx[side || top], tileIdx[bottom || top]], kind: kind || "opaque", color });
+  def(1, "Камень", "stone", 0, 0, 0, "#7f7f7c"); def(2, "Доски", "planks", 0, 0, 0, "#a87a48");
+  def(3, "Трава", "grassTop", "grassSide", "dirt", 0, "#5f9c40"); def(4, "Стекло", "glass", 0, 0, "clear", "#cfe8f0");
+  def(5, "Золото", "gold", 0, 0, 0, "#e8b923"); def(6, "Светокамень", "glow", 0, 0, "glow", "#f0cf80");
+  def(7, "Лава", "lava", 0, 0, "glow", "#e0561c"); def(8, "Динамит", "tntTop", "tntSide", "tntTop", 0, "#c4302a");
+  def(9, "Земля", "dirt", 0, 0, 0, "#86603c"); def(10, "Песок", "sand", 0, 0, 0, "#dbcfa0");
+  def(11, "Бревно", "logTop", "logSide", "logTop", 0, "#68502f"); def(12, "Листва", "leaves", 0, 0, "cut", "#3d7a2a");
+  def(13, "Булыжник", "cobble", 0, 0, 0, "#6e6e6c"); def(14, "Угольная руда", "coal", 0, 0, 0, "#585858");
+  def(15, "Железная руда", "iron", 0, 0, 0, "#9a8a7a"); def(16, "Алмазная руда", "diamond", 0, 0, 0, "#5cdbd5");
+  def(17, "Бедрок", "bedrock", 0, 0, 0, "#444444"); def(18, "Вода", "water", 0, 0, "clear", "#3060c8");
+  const MC_ITEMS = [3, 9, 1, 13, 2, 11, 12, 4, 8, 10, 5, 6, 7, 14, 15, 16, 18];
+  const MC_LIST = MC_ITEMS.map((id) => {
+    const icon = tileSrc[TILES[MCB[id].t[1]]];
+    return { name: MCB[id].name, icon, mat: new THREE.MeshLambertMaterial({ map: tex(icon), transparent: MCB[id].kind !== "opaque", alphaTest: 0.1 }) };
+  });
+  { const g = $("mcIcon").getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(C.grassSide, 0, 0); }
+
+  const mcMats = {
+    opaque: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5 }),
+    glow: new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true }),
+    clear: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, transparent: true, opacity: 0.82, depthWrite: false }),
+  };
+  Object.values(mcMats).forEach((m) => (m.userData.keep = true));
+
+  // face table: direction, corners (position + uv), Minecraft-style fixed face shading
+  const FACES = [
+    { dir: [-1, 0, 0], shade: 0.8, c: [[0, 1, 0, 0, 1], [0, 0, 0, 0, 0], [0, 1, 1, 1, 1], [0, 0, 1, 1, 0]] },
+    { dir: [1, 0, 0], shade: 0.8, c: [[1, 1, 1, 0, 1], [1, 0, 1, 0, 0], [1, 1, 0, 1, 1], [1, 0, 0, 1, 0]] },
+    { dir: [0, -1, 0], shade: 0.55, c: [[1, 0, 1, 1, 0], [0, 0, 1, 0, 0], [1, 0, 0, 1, 1], [0, 0, 0, 0, 1]] },
+    { dir: [0, 1, 0], shade: 1, c: [[0, 1, 1, 1, 1], [1, 1, 1, 0, 1], [0, 1, 0, 1, 0], [1, 1, 0, 0, 0]] },
+    { dir: [0, 0, -1], shade: 0.9, c: [[1, 0, 0, 0, 0], [0, 0, 0, 1, 0], [1, 1, 0, 0, 1], [0, 1, 0, 1, 1]] },
+    { dir: [0, 0, 1], shade: 0.9, c: [[0, 0, 1, 0, 0], [1, 0, 1, 1, 0], [0, 1, 1, 0, 1], [1, 1, 1, 1, 1]] },
+  ];
+  function needFace(id, n) {
+    if (n === 0) return true;
+    if (n === id) return id === LEAVES;
+    const nk = MCB[n].kind;
+    if (MCB[id].kind === "clear") return nk === "cut";
+    return nk === "clear" || nk === "cut";
+  }
+  function buildChunk(cx, cz) {
+    const key = cz * (MC_W / CH) + cx;
+    if (mcChunks[key]) mcChunks[key].forEach((m) => { world.remove(m); m.geometry.dispose(); });
+    const B = {};
+    for (const k in mcMats) B[k] = { p: [], n: [], u: [], c: [], i: [] };
+    for (let y = 0; y < MC_H; y++) for (let z = cz * CH; z < cz * CH + CH; z++) for (let x = cx * CH; x < cx * CH + CH; x++) {
+      const id = vox[vi(x, y, z)]; if (!id) continue;
+      const d = MCB[id], b = B[d.kind === "cut" ? "opaque" : d.kind];
+      for (let f = 0; f < 6; f++) {
+        const F = FACES[f], ny = y + F.dir[1];
+        const n = ny < 0 ? 1 : mcGet(x + F.dir[0], ny, z + F.dir[2]);
+        if (!needFace(id, n)) continue;
+        const tile = f === 3 ? d.t[0] : f === 2 ? d.t[2] : d.t[1];
+        const tu = tile % AT_C, tv = Math.floor(tile / AT_C), base = b.p.length / 3;
+        for (const c of F.c) {
+          b.p.push(x + c[0], y + c[1], z + c[2]); b.n.push(F.dir[0], F.dir[1], F.dir[2]);
+          b.u.push((tu + 0.002 + c[3] * 0.996) / AT_C, 1 - (tv + 1 - 0.002 - c[4] * 0.996) / AT_R);
+          b.c.push(F.shade, F.shade, F.shade);
+        }
+        b.i.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
+      }
+    }
+    const meshes = [];
+    for (const k in B) {
+      const b = B[k]; if (!b.i.length) continue;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(b.p, 3));
+      g.setAttribute("normal", new THREE.Float32BufferAttribute(b.n, 3));
+      g.setAttribute("uv", new THREE.Float32BufferAttribute(b.u, 2));
+      g.setAttribute("color", new THREE.Float32BufferAttribute(b.c, 3));
+      g.setIndex(b.i); g.computeBoundingSphere();
+      const m = new THREE.Mesh(g, mcMats[k]); m.castShadow = k !== "clear"; m.receiveShadow = true;
+      world.add(m); meshes.push(m);
+    }
+    mcChunks[key] = meshes;
+  }
+  const dirty = new Set();
+  function dirtyChunk(x, z) {
+    const cx = (x / CH) | 0, cz = (z / CH) | 0, last = MC_W / CH - 1;
+    dirty.add(cx + "," + cz);
+    if (x % CH === 0 && cx > 0) dirty.add((cx - 1) + "," + cz);
+    if (x % CH === CH - 1 && cx < last) dirty.add((cx + 1) + "," + cz);
+    if (z % CH === 0 && cz > 0) dirty.add(cx + "," + (cz - 1));
+    if (z % CH === CH - 1 && cz < last) dirty.add(cx + "," + (cz + 1));
+  }
+  function flushChunks() { dirty.forEach((k) => { const [a, b] = k.split(",").map(Number); buildChunk(a, b); }); dirty.clear(); }
+  function mcSet(x, y, z, id) {
+    if (x < 0 || z < 0 || x >= MC_W || z >= MC_W || y < 0 || y >= MC_H) return;
+    vox[vi(x, y, z)] = id; dirtyChunk(x, z); mcColumn(x, z); flushChunks();
+  }
+  function mcBlast(cx, cy, cz) {
+    for (let x = Math.floor(cx - 3); x <= cx + 3; x++) for (let y = Math.floor(cy - 3); y <= cy + 3; y++) for (let z = Math.floor(cz - 3); z <= cz + 3; z++) {
+      if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz) > 3.2 + Math.random() * 0.6) continue;
+      const id = mcGet(x, y, z);
+      if (!id || id === BEDROCK || id === WATER) continue;
+      if (id === MC_TNT) { const k = vkey(x, y, z), t = tnts.find((q) => q.k === k); if (t) { t.t = Math.min(t.t, 0.25); continue; } }
+      vox[vi(x, y, z)] = 0; dirtyChunk(x, z); mcColumn(x, z);
+    }
+    flushChunks();
+  }
+
+  // top-down colour map for the minimap
+  const mcTop = document.createElement("canvas"); mcTop.width = mcTop.height = MC_W;
+  const mcTopX = mcTop.getContext("2d"), tmpC = new THREE.Color();
+  function mcColumn(x, z) {
+    for (let y = MC_H - 1; y >= 0; y--) {
+      const id = vox[vi(x, y, z)]; if (!id) continue;
+      tmpC.set(MCB[id].color); const k = 0.55 + (y / MC_H) * 0.8;
+      mcTopX.fillStyle = `rgb(${Math.min(255, tmpC.r * 255 * k) | 0},${Math.min(255, tmpC.g * 255 * k) | 0},${Math.min(255, tmpC.b * 255 * k) | 0})`;
+      mcTopX.fillRect(x, z, 1, 1); return;
+    }
+  }
+  function drawMiniMC() {
+    const W = 336, cell = 4;
+    mini.clearRect(0, 0, W, W);
+    mini.save(); mini.beginPath(); mini.arc(W / 2, W / 2, W / 2 - 2, 0, TAU); mini.clip();
+    mini.fillStyle = "#1f232b"; mini.fillRect(0, 0, W, W);
+    const ox = W / 2 - player.x * cell, oy = W / 2 - player.z * cell;
+    mini.imageSmoothingEnabled = false; mini.drawImage(mcTop, ox, oy, MC_W * cell, MC_W * cell);
+    mini.fillStyle = "#e0402e";
+    for (const m of monsters) { mini.beginPath(); mini.arc(ox + m.x * cell, oy + m.z * cell, 5, 0, TAU); mini.fill(); }
+    drawPlayer(mini, W / 2, W / 2, 10);
+    mini.restore();
+    mini.fillStyle = "#f1eadb"; mini.font = "600 22px Golos Text, sans-serif"; mini.textAlign = "center"; mini.fillText("С", W / 2, 26);
+  }
+
+  // terrain: smooth value noise → hills, beaches, lakes, ores and trees
+  function hash(x, z, s) { let h = (Math.imul(x, 374761393) + Math.imul(z, 668265263) + Math.imul(s, 1442695041)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+  function vnoise(x, z, s) {
+    const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+    const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+    const a = hash(xi, zi, s), b = hash(xi + 1, zi, s), c = hash(xi, zi + 1, s), d = hash(xi + 1, zi + 1, s);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  function fbm(x, z, s, oct) { let t = 0, amp = 1, f = 1, sum = 0; for (let i = 0; i < oct; i++) { t += vnoise(x * f, z * f, s + i * 31) * amp; sum += amp; amp *= 0.5; f *= 2; } return t / sum; }
+  function mcGenerate() {
+    vox = new Uint8Array(MC_W * MC_W * MC_H);
+    const seed = (Math.random() * 1e9) | 0, hm = new Int32Array(MC_W * MC_W);
+    for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
+      const base = fbm(x / 44, z / 44, seed, 4), hills = Math.pow(fbm(x / 80, z / 80, seed + 7, 2), 2.4);
+      const h = Math.max(3, Math.min(MC_H - 12, Math.floor(4 + base * 16 + hills * 34)));
+      hm[z * MC_W + x] = h;
+      const beach = h <= SEA + 1;
+      for (let y = 0; y <= h; y++) {
+        let id;
+        if (y === 0) id = BEDROCK;
+        else if (y < h - 3) { const r = Math.random(); id = r < 0.012 ? 14 : r < 0.018 && y < 26 ? 15 : r < 0.0205 && y < 10 ? 16 : 1; }
+        else if (y < h) id = beach ? 10 : 9;
+        else id = beach ? 10 : 3;
+        vox[vi(x, y, z)] = id;
+      }
+      for (let y = h + 1; y <= SEA; y++) vox[vi(x, y, z)] = WATER;
+    }
+    for (let k = 0; k < MC_W * MC_W * 0.012; k++) {
+      const x = 3 + ((Math.random() * (MC_W - 6)) | 0), z = 3 + ((Math.random() * (MC_W - 6)) | 0), h = hm[z * MC_W + x];
+      if (vox[vi(x, h, z)] !== 3) continue;
+      const th = 4 + ((Math.random() * 3) | 0), top = h + th;
+      if (top + 2 >= MC_H) continue;
+      for (let i = 1; i <= th; i++) vox[vi(x, h + i, z)] = 11;
+      for (let dy = -2; dy <= 1; dy++) {
+        const r = dy >= 0 ? 1 : 2;
+        for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) === r && Math.abs(dz) === r && (dy >= 0 || Math.random() < 0.5)) continue;
+          const lx = x + dx, ly = top + dy, lz = z + dz;
+          if (vox[vi(lx, ly, lz)] === 0) vox[vi(lx, ly, lz)] = LEAVES;
+        }
+      }
+    }
+    // spawn on dry land closest to the centre
+    let best = null;
+    for (let r = 0; r < MC_W / 2 && !best; r += 2) for (let a = 0; a < 16 && !best; a++) {
+      const x = Math.floor(MC_W / 2 + Math.cos(a / 16 * TAU) * r), z = Math.floor(MC_W / 2 + Math.sin(a / 16 * TAU) * r);
+      if (hm[z * MC_W + x] > SEA + 1) best = [x, z];
+    }
+    best = best || [MC_W / 2, MC_W / 2];
+    let sy = MC_H - 1; while (sy > 0 && (vox[vi(best[0], sy, best[1])] === 0 || vox[vi(best[0], sy, best[1])] === WATER)) sy--;
+    Object.assign(spawn, { x: best[0] + 0.5, y: sy + 1, z: best[1] + 0.5 });
+  }
+  const cloudTex = (() => {
+    const c = pix((x, n) => { x.fillStyle = "#fff"; for (let i = 0; i < 60; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(2, 8) | 0, rnd(1, 4) | 0); }, 64);
+    const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 4); return t;
+  })();
+  function mcBuildAll() {
+    world = new THREE.Group(); scene.add(world); mcChunks = [];
+    for (let cz = 0; cz < MC_W / CH; cz++) for (let cx = 0; cx < MC_W / CH; cx++) buildChunk(cx, cz);
+    clouds = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.85, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+    clouds.rotation.x = -Math.PI / 2; clouds.position.set(MC_W / 2, 72, MC_W / 2); world.add(clouds);
+    mcTopX.clearRect(0, 0, MC_W, MC_W);
+    for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) mcColumn(x, z);
+  }
+  function applyAtmosphere(kind) {
+    const mc = kind === "mc", hz = mc ? 0xc3d9ff : HAZE;
+    scene.background.setHex(hz); scene.fog.color.setHex(hz);
+    scene.fog.near = mc ? 30 : 18; scene.fog.far = mc ? 120 : 85;
+    if (mc) { skyU.zen.value.setRGB(0.45, 0.65, 1.0); skyU.hor.value.setRGB(0.78, 0.87, 1.0); }
+    else { skyU.zen.value.setRGB(0.42, 0.62, 0.86); skyU.hor.value.setRGB(0.98, 0.85, 0.70); }
+    sun.color.setHex(mc ? 0xfff4e0 : 0xffdcb0);
+  }
 
   // ---------- game flow ----------
   function newGame(n) {
-    N = n; clearMonsters(); clearBlocks();
-    particles.forEach((p) => scene.remove(p.p)); particles = [];
+    N = n; resetCommon("maze");
     generate(n); build();
     Object.assign(player, { x: cc(startCell[0]), z: cc(startCell[1]), y: 0, vy: 0, pitch: 0, kx: 0, kz: 0, hp: 10 });
     player.yaw = !grid[idx(2, 1)] ? -Math.PI / 2 : Math.PI;
+    Object.assign(spawn, { x: player.x, y: 0, z: player.z });
     elapsed = 0; dist = 0; hints = 0; kills = 0; hintUntil = 0; hintPath = [];
     flying = false; $("tFly").classList.remove("main");
     reveal();
+    showHud();
+    toast(touchUI ? "Утро. Найдите голубой маяк" : "Утро. Щёлкните, чтобы управлять мышью");
+  }
+  function showHud() {
     ["menu", "win", "pause"].forEach((i) => ($(i).hidden = true));
     ["hud", "side", "hotbar", "cross"].forEach((i) => ($(i).hidden = false));
     $("touchBtns").hidden = !touchUI;
+    $("bHint").hidden = $("bClearBlocks").hidden = worldKind === "mc";
     state = "play"; renderHotbar();
     lockPointer();
-    toast(touchUI ? "Утро. Найдите голубой маяк" : "Утро. Щёлкните, чтобы управлять мышью");
+  }
+  function resetCommon(kind) {
+    clearMonsters(); clearBlocks(); tnts = [];
+    particles.forEach((p) => scene.remove(p.p)); particles = [];
+    disposeWorld(); worldKind = kind; applyAtmosphere(kind); underwater = false;
+    distP = null; distPCell = -1; selBlock = 0; mode = "blocks";
+    elapsed = 0; dist = 0; hints = 0; kills = 0; hintUntil = 0; hintPath = [];
+    flying = false; $("tFly").classList.remove("main");
+  }
+  function enterMC() {
+    resetCommon("mc");
+    mcGenerate(); mcBuildAll();
+    Object.assign(player, { x: spawn.x, y: spawn.y, z: spawn.z, vy: 0, pitch: -0.15, yaw: Math.PI * 0.75, kx: 0, kz: 0, hp: 10 });
+    showHud();
+    toast("Мир Minecraft. ЛКМ — ломать, ПКМ — ставить");
   }
   function pauseGame() {
     if (state !== "play") return;
     state = "pause"; keys.clear();
-    $("pauseInfo").textContent = `Время ${fmt(elapsed)} · пройдено ${Math.round(dist)} м · монстров ${monsters.length} · блоков ${blocks.size}`;
+    $("pauseInfo").textContent = worldKind === "mc" ? `Мир Minecraft · время ${fmt(elapsed)} · монстров ${monsters.length}` : `Время ${fmt(elapsed)} · пройдено ${Math.round(dist)} м · монстров ${monsters.length} · блоков ${blocks.size}`;
     $("pause").hidden = false;
   }
   function resume() { $("pause").hidden = true; state = "play"; lockPointer(); }
@@ -817,6 +1114,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   function hint() {
     if (state !== "play") return;
+    if (worldKind === "mc") { toast("В этом мире нет выхода. Стройте и исследуйте"); return; }
     let cx = Math.floor(player.x / S), cy = Math.floor(player.z / S);
     if (!(distExit[idx(cx, cy)] >= 0)) { toast("Спуститесь в коридор, чтобы взять подсказку"); return; }
     hints++; elapsed += HINT_PENALTY; hintUntil = performance.now() / 1000 + HINT_TIME;
@@ -855,18 +1153,24 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   });
   canvas.addEventListener("mousedown", (e) => {
     if (state !== "play" || touchUI) return;
-    if (document.pointerLockElement === canvas) { if (e.button === 0) use(); else if (e.button === 2) attack(); return; }
+    if (document.pointerLockElement === canvas) { if (e.button === 0 || e.button === 2) { holdBtn = e.button; holdT = 0.3; clickAct(e.button); } return; }
     if (usePointerLock) { lockPointer(); return; }
     dragging = true; dragMoved = 0; dragBtn = e.button; lastX = e.clientX; lastY = e.clientY;
   });
   document.addEventListener("mouseup", () => {
-    if (dragging && dragMoved < 6 && state === "play") { if (dragBtn === 0) use(); else if (dragBtn === 2) attack(); }
+    holdBtn = -1;
+    if (dragging && dragMoved < 6 && state === "play") clickAct(dragBtn);
     dragging = false;
   });
   document.addEventListener("contextmenu", (e) => e.preventDefault());
+  // Maze: left places, right hits. Minecraft world: left breaks/hits, right places (as in the original).
+  function clickAct(btn) {
+    const mc = worldKind === "mc";
+    if (btn === 0) (mc ? attack : use)(); else if (btn === 2) (mc ? use : attack)();
+  }
   addEventListener("wheel", (e) => {
     if (state !== "play") return;
-    const n = mode === "blocks" ? BLOCKS.length : MONSTERS.length, cur = mode === "blocks" ? selBlock : selMob;
+    const n = mode === "blocks" ? blockList().length : MONSTERS.length, cur = mode === "blocks" ? selBlock : selMob;
     select((cur + (e.deltaY > 0 ? 1 : -1) + n) % n);
   }, { passive: true });
   addEventListener("keydown", (e) => {
@@ -937,7 +1241,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   $("bAggro").addEventListener("click", () => { aggressive = !aggressive; $("bAggro").textContent = "Монстры нападают: " + (aggressive ? "да" : "нет"); });
   $("bClearMobs").addEventListener("click", () => { clearMonsters(); $("pauseInfo").textContent = "Все монстры убраны."; });
   $("bClearBlocks").addEventListener("click", () => { clearBlocks(); $("pauseInfo").textContent = "Все поставленные блоки убраны."; });
-  $("bRestart").addEventListener("click", () => newGame(N));
+  $("bRestart").addEventListener("click", () => (worldKind === "mc" ? enterMC() : newGame(N)));
+  $("bMC").addEventListener("click", enterMC);
   $("bMenu").addEventListener("click", toMenu);
   $("bAgain").addEventListener("click", () => newGame(N));
   $("bMenu2").addEventListener("click", toMenu);
@@ -971,6 +1276,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     ctx.restore();
   }
   function drawMini(now) {
+    if (worldKind === "mc") return drawMiniMC();
     const W = 336, cell = 12, span = Math.ceil(W / cell / 2) + 1;
     const pcx = player.x / S, pcy = player.z / S;
     mini.clearRect(0, 0, W, W);
@@ -985,6 +1291,13 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     const dpr = Math.min(devicePixelRatio || 1, 2);
     const size = Math.floor(Math.min(innerWidth - 32, innerHeight - 90));
     if (big.width !== size * dpr) { big.width = big.height = size * dpr; big.style.width = big.style.height = size + "px"; }
+    if (worldKind === "mc") {
+      const cell = big.width / MC_W;
+      bigx.imageSmoothingEnabled = false; bigx.drawImage(mcTop, 0, 0, big.width, big.height);
+      bigx.fillStyle = "#e0402e"; for (const m of monsters) { bigx.beginPath(); bigx.arc(m.x * cell, m.z * cell, Math.max(3, cell * 0.8), 0, TAU); bigx.fill(); }
+      drawPlayer(bigx, player.x * cell, player.z * cell, Math.max(8, cell * 2));
+      return;
+    }
     const cell = (size * dpr) / G;
     bigx.fillStyle = "#1f232b"; bigx.fillRect(0, 0, big.width, big.height);
     drawMaze(bigx, 0, 0, cell, 0, 0, G - 1, G - 1, now);
@@ -1003,7 +1316,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (stick.id !== null) { f -= stick.vy; s += stick.vx; }
     const len = Math.hypot(f, s); if (len > 1) { f /= len; s /= len; }
     const run = keys.has("ShiftLeft") || keys.has("ShiftRight") || touchRun;
-    const sp = (run ? RUN : WALK) * dt * (flying ? 1.8 : 1), sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+    const inWater = worldKind === "mc" && !flying && mcGet(Math.floor(player.x), Math.floor(player.y + 0.4), Math.floor(player.z)) === WATER;
+    const sp = (run ? RUN : WALK) * dt * (flying ? 1.8 : inWater ? 0.6 : 1), sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
     const dx = (-sin * f + cos * s) * sp + player.kx * dt, dz = (-cos * f - sin * s) * sp + player.kz * dt;
     const decay = Math.pow(0.004, dt); player.kx *= decay; player.kz *= decay;
     const up = keys.has("Space") || touchUp, down = keys.has("KeyC") || keys.has("ControlLeft") || touchDown;
@@ -1020,18 +1334,19 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       }
     } else {
       if (player.onGround) airJumps = 1;
+      if (inWater) { player.vy = Math.max(player.vy, -2.5); if (up) player.vy = Math.min(player.vy + GRAV * dt * 1.6, 3.6); airJumps = 1; }
       if ((jumpQ || up) && player.onGround) player.vy = JUMP;
       else if (jumpQ && airJumps > 0) { player.vy = JUMP * 0.9; airJumps--; }
       physics(player, dx, dz, dt);
     }
     jumpQ = false;
-    if (player.y < -5) Object.assign(player, { x: cc(startCell[0]), z: cc(startCell[1]), y: 0, vy: 0 });
+    if (player.y < -5) Object.assign(player, { x: spawn.x, z: spawn.z, y: spawn.y, vy: 0 });
     const moved = Math.hypot(player.x - ox, player.z - oz);
     dist += moved; if (player.onGround) bob += moved * 2.4;
     if (moved > 0 || !player.onGround) reveal();
     if (standingOn(player) === LAVA + 1 && now - player.hurtT > 0.6) hurtPlayer(2, player.x + 0.01, player.z, 0);
     if (now - player.hurtT > 4 && player.hp < 10) player.hp = Math.min(10, player.hp + dt * 0.6);
-    if (player.y < 1 && Math.hypot(player.x - cc(exitCell[0]), player.z - cc(exitCell[1])) < 1.3) winGame();
+    if (worldKind === "maze" && player.y < 1 && Math.hypot(player.x - cc(exitCell[0]), player.z - cc(exitCell[1])) < 1.3) winGame();
   }
 
   function updateFlow() {
@@ -1045,7 +1360,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
 
   const lerpAngle = (a, b, t) => { const d = ((b - a + Math.PI) % TAU + TAU) % TAU - Math.PI; return a + d * Math.min(1, t); };
   function updateMonsters(dt, now) {
-    if (monsters.length) updateFlow();
+    if (monsters.length && worldKind === "maze") updateFlow();
     for (let i = monsters.length - 1; i >= 0; i--) {
       const m = monsters[i], ty = m.type;
       m.cool -= dt; m.flash -= dt;
@@ -1108,7 +1423,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function updateEffects(dt, now) {
     for (let i = tnts.length - 1; i >= 0; i--) {
       const t = tnts[i]; t.t -= dt;
-      if (t.t <= 0) { tnts.splice(i, 1); blocks.delete(t.k); rebuildBlocks(TNT); explode(t.x + 0.5, t.y + 0.5, t.z + 0.5); }
+      if (t.t <= 0) { tnts.splice(i, 1); if (worldKind === "mc") mcSet(t.x, t.y, t.z, 0); else { blocks.delete(t.k); rebuildBlocks(TNT); } explode(t.x + 0.5, t.y + 0.5, t.z + 0.5); }
     }
     const blink = tnts.length > 0 && Math.sin(now * 14) > 0;
     BLOCKS[TNT].mat.forEach((mm) => mm.emissive.setHex(blink ? 0x777777 : 0));
@@ -1145,10 +1460,16 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       updateEffects(dt, now);
       $("tTime").textContent = fmt(elapsed);
       $("hpBar").style.width = (player.hp * 10) + "%";
+      if (worldKind === "mc") {
+        $("tSub").textContent = `X ${Math.floor(player.x)} · Y ${Math.floor(player.y)} · Z ${Math.floor(player.z)}` + (flying ? " · полёт" : "");
+        $("tMob").textContent = `Монстров: ${monsters.length}`;
+      } else {
       const gx = Math.floor(player.x / S), gz = Math.floor(player.z / S);
       const left = gx >= 0 && gz >= 0 && gx < G && gz < G ? distExit[idx(gx, gz)] : -1;
       $("tSub").textContent = `${Math.round(dist)} м пройдено · ${G}×${G}` + (now < hintUntil && left >= 0 ? ` · до выхода ${left * S} м` : "") + (flying ? " · полёт" : "");
       $("tMob").textContent = `Монстров: ${monsters.length} · блоков: ${blocks.size}`;
+      }
+      if (holdBtn >= 0 && worldKind === "mc" && document.pointerLockElement === canvas) { holdT -= dt; if (holdT <= 0) { holdT = 0.22; clickAct(holdBtn); } }
     } else if (state === "menu") {
       player.yaw += dt * 0.06;
     }
@@ -1160,9 +1481,17 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       camera.position.set(player.x + rnd(-sh, sh), player.y + EYE + Math.sin(bob) * 0.04 + rnd(-sh, sh), player.z + rnd(-sh, sh));
       camera.rotation.set(player.pitch, player.yaw, 0);
       sun.position.set(player.x + SUN_DIR.x * 70, SUN_DIR.y * 70, player.z + SUN_DIR.z * 70);
-      sun.target.position.set(player.x, 0, player.z); sun.target.updateMatrixWorld();
-      const r1 = exitGroup.getObjectByName("ring"), r2 = exitGroup.getObjectByName("ring2");
-      r1.scale.setScalar(1 + Math.sin(now * 2) * 0.08); r2.rotation.z = now; r2.position.y = 1.4 + Math.sin(now * 1.5) * 0.25;
+      sun.position.y += player.y;
+      sun.target.position.set(player.x, player.y, player.z); sun.target.updateMatrixWorld();
+      if (exitGroup) {
+        const r1 = exitGroup.getObjectByName("ring"), r2 = exitGroup.getObjectByName("ring2");
+        r1.scale.setScalar(1 + Math.sin(now * 2) * 0.08); r2.rotation.z = now; r2.position.y = 1.4 + Math.sin(now * 1.5) * 0.25;
+      }
+      if (worldKind === "mc") {
+        if (clouds) clouds.material.map.offset.x = now * 0.004;
+        const uw = mcGet(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)) === WATER;
+        if (uw !== underwater) { underwater = uw; if (uw) { scene.fog.color.setHex(0x22508f); scene.background.setHex(0x22508f); scene.fog.near = 0.5; scene.fog.far = 14; } else applyAtmosphere("mc"); }
+      }
       swing = Math.max(0, swing - dt);
       hand.rotation.x = 0.3 - Math.sin((swing / 0.25) * Math.PI) * 0.9;
       hand.position.y = -0.3 + Math.sin(bob) * 0.015;
