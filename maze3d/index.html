@@ -87,6 +87,11 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
 .w-head b { font-family: var(--f-display); font-size: 28px; }
 .w-head span { color: var(--dim); font-size: 13px; }
 .world.mc { border-color: rgba(110,170,80,0.6); }
+.world.net { border-color: rgba(85,200,255,0.55); }
+.net-code { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
+.net-code input { width: 5.5em; font: 600 16px var(--f-mono); letter-spacing: 0.12em; text-transform: lowercase; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
+.net-code input:focus-visible { outline: 2px solid var(--portal); outline-offset: 1px; }
+.net-chip { color: var(--portal) !important; }
 .mc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .mc-row .size { flex-direction: row; align-items: center; gap: 12px; }
 .mc-txt { display: flex; flex-direction: column; gap: 4px; }
@@ -151,6 +156,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   <div class="hp" title="Здоровье"><i id="hpBar"></i></div>
   <div class="sub" id="tSub">0 м пройдено</div>
   <div class="sub" id="tMob">Монстров: 0 · блоков: 0</div>
+  <div class="sub net-chip" id="tNet" hidden></div>
 </div>
 <div class="hud side" id="side" hidden>
   <canvas id="minimap" width="336" height="336"></canvas>
@@ -195,6 +201,15 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       <button class="size" type="button" data-n="12"><b>Малый</b><span>25 × 25 клеток</span><span class="best" data-best="12">рекорда нет</span></button>
       <button class="size" type="button" data-n="25"><b>Большой</b><span>51 × 51 клеток</span><span class="best" data-best="25">рекорда нет</span></button>
       <button class="size big" type="button" data-n="45"><b>Огромный</b><span>91 × 91 клеток</span><span class="best" data-best="45">рекорда нет</span></button>
+    </div>
+    </div>
+    <div class="world net">
+    <div class="w-head"><b>Игра по сети</b><span id="netInfo">проверяем, можно ли играть вместе…</span></div>
+    <div class="mc-row" id="netRow">
+      <button class="btn primary" id="bHost" type="button" disabled>Создать игру</button>
+      <label class="net-code"><span>Код</span><input id="netCode" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ab3k" disabled></label>
+      <button class="btn" id="bJoin" type="button" disabled>Войти</button>
+      <button class="btn" id="bLeave" type="button" hidden>Выйти из сетевой игры</button>
     </div>
     </div>
     <div class="world mc">
@@ -559,6 +574,13 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   let mode = "blocks", selBlock = 0, selMob = 0, aggressive = true;
   let flying = false, airJumps = 1, lastSpace = 0, touchUp = false, touchDown = false;
   let worldKind = "maze", holdBtn = -1, holdT = 0, underwater = 0;
+  // world generation draws from a seeded generator so every player of a network game builds the same world
+  let rng = Math.random, worldSeed = 0, nextSeed = null;
+  function seedRng(seed) {
+    let a = seed >>> 0;
+    rng = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function takeSeed() { worldSeed = nextSeed != null ? nextSeed : (Math.random() * 2147483647) | 0; nextSeed = null; return worldSeed; }
   const spawn = { x: 0, y: 0, z: 0 };
   const blocks = new Map(); // voxel key -> block type index
   let tnts = []; // {k, x, y, z, t}
@@ -580,13 +602,13 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       const [cx, cy] = stack[stack.length - 1], opts = [];
       for (const [dx, dy] of dirs) { const nx = cx + dx, ny = cy + dy; if (nx >= 0 && ny >= 0 && nx < n && ny < n && !vis[ny * n + nx]) opts.push([dx, dy]); }
       if (!opts.length) { stack.pop(); continue; }
-      const [dx, dy] = opts[(Math.random() * opts.length) | 0], nx = cx + dx, ny = cy + dy;
+      const [dx, dy] = opts[(rng() * opts.length) | 0], nx = cx + dx, ny = cy + dy;
       grid[idx(2 * cx + 1 + dx, 2 * cy + 1 + dy)] = 0; grid[idx(2 * nx + 1, 2 * ny + 1)] = 0;
       vis[ny * n + nx] = 1; stack.push([nx, ny]);
     }
     const loops = Math.floor(n * n * 0.035);
     for (let k = 0; k < loops; k++) {
-      const x = 1 + ((Math.random() * (G - 2)) | 0), y = 1 + ((Math.random() * (G - 2)) | 0);
+      const x = 1 + ((rng() * (G - 2)) | 0), y = 1 + ((rng() * (G - 2)) | 0);
       if (grid[idx(x, y)] !== 1) continue;
       if ((x % 2 === 1 && y % 2 === 0 && !grid[idx(x, y - 1)] && !grid[idx(x, y + 1)]) || (x % 2 === 0 && y % 2 === 1 && !grid[idx(x - 1, y)] && !grid[idx(x + 1, y)])) grid[idx(x, y)] = 0;
     }
@@ -713,6 +735,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     mesh.count = k; mesh.instanceMatrix.needsUpdate = true;
   }
   function setBlock(x, y, z, type) {
+    netRecord(9, x, y, z, type === null ? -1 : type);
     const k = vkey(x, y, z), old = blocks.get(k);
     if (type === null) {
       if (old === undefined) return;
@@ -1126,6 +1149,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function flushChunks() { dirty.forEach((k) => { const [a, b] = k.split(",").map(Number); buildChunk(a, b); }); dirty.clear(); }
   function mcSet(x, y, z, id) {
     if (x < 0 || z < 0 || x >= MC_W || z >= MC_W || y < 0 || y >= MC_H) return;
+    netRecord(dimCode(), x, y, z, id);
     const j = vi(x, y, z), old = vox[j]; vox[j] = id; fl[j] = 0;
     dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z);
     if ((old === OBSIDIAN || old === PORTAL) && id !== old) breakPortalNear(x, y, z);
@@ -1164,7 +1188,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       if (!ok || cells.length < 2) continue;
       const ys = cells.map((c) => c[1]);
       if (Math.max(...ys) - Math.min(...ys) < 2) continue;
-      cells.forEach(([a, b, c]) => { vox[vi(a, b, c)] = PORTAL; fl[vi(a, b, c)] = 0; dirtyChunk(a, c); });
+      cells.forEach(([a, b, c]) => { vox[vi(a, b, c)] = PORTAL; fl[vi(a, b, c)] = 0; dirtyChunk(a, c); netRecord(dimCode(), a, b, c, PORTAL); });
       flushChunks();
       burst(hit.px + 0.5, hit.py + 0.5, hit.pz + 0.5, 0xb070ff, 14, 2);
       toast("Портал открыт");
@@ -1187,7 +1211,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   function mcBlast(cx, cy, cz) {
     for (let x = Math.floor(cx - 3); x <= cx + 3; x++) for (let y = Math.floor(cy - 3); y <= cy + 3; y++) for (let z = Math.floor(cz - 3); z <= cz + 3; z++) {
-      if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz) > 3.2 + Math.random() * 0.6) continue;
+      if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz) > 3.2 + hash(x * 7 + y, z * 13 - y, 99) * 0.6) continue;
       const id = mcGet(x, y, z);
       if (!id || id === BEDROCK || id === WATER || id === MC_LAVA || id === OBSIDIAN || id === PORTAL || id >= END_FRAME && id <= END_PORTAL) continue;
       if (id === MC_TNT) { const k = vkey(x, y, z), t = tnts.find((q) => q.k === k); if (t) { t.t = Math.min(t.t, 0.25); continue; } }
@@ -1299,7 +1323,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function mcGenerate() {
     vox = new Uint8Array(MC_W * MC_W * MC_H); fl = new Uint8Array(vox.length);
     fluidQ[WATER].clear(); fluidQ[MC_LAVA].clear();
-    const seed = (Math.random() * 1e9) | 0, hm = new Int32Array(MC_W * MC_W);
+    const seed = (rng() * 1e9) | 0, hm = new Int32Array(MC_W * MC_W);
     for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
       const base = fbm(x / 44, z / 44, seed, 4), hills = Math.pow(fbm(x / 80, z / 80, seed + 7, 2), 2.4);
       const h = Math.max(3, Math.min(MC_H - 12, Math.floor(4 + base * 16 + hills * 34)));
@@ -1308,7 +1332,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       for (let y = 0; y <= h; y++) {
         let id;
         if (y === 0) id = BEDROCK;
-        else if (y < h - 3) { const r = Math.random(); id = r < 0.012 ? 14 : r < 0.018 && y < 26 ? 15 : r < 0.0205 && y < 10 ? 16 : 1; }
+        else if (y < h - 3) { const r = rng(); id = r < 0.012 ? 14 : r < 0.018 && y < 26 ? 15 : r < 0.0205 && y < 10 ? 16 : 1; }
         else if (y < h) id = beach ? 10 : 9;
         else id = beach ? 10 : 3;
         vox[vi(x, y, z)] = id;
@@ -1316,15 +1340,15 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       for (let y = h + 1; y <= SEA; y++) vox[vi(x, y, z)] = WATER;
     }
     for (let k = 0; k < MC_W * MC_W * 0.012; k++) {
-      const x = 3 + ((Math.random() * (MC_W - 6)) | 0), z = 3 + ((Math.random() * (MC_W - 6)) | 0), h = hm[z * MC_W + x];
+      const x = 3 + ((rng() * (MC_W - 6)) | 0), z = 3 + ((rng() * (MC_W - 6)) | 0), h = hm[z * MC_W + x];
       if (vox[vi(x, h, z)] !== 3) continue;
-      const th = 4 + ((Math.random() * 3) | 0), top = h + th;
+      const th = 4 + ((rng() * 3) | 0), top = h + th;
       if (top + 2 >= MC_H) continue;
       for (let i = 1; i <= th; i++) vox[vi(x, h + i, z)] = 11;
       for (let dy = -2; dy <= 1; dy++) {
         const r = dy >= 0 ? 1 : 2;
         for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
-          if (Math.abs(dx) === r && Math.abs(dz) === r && (dy >= 0 || Math.random() < 0.5)) continue;
+          if (Math.abs(dx) === r && Math.abs(dz) === r && (dy >= 0 || rng() < 0.5)) continue;
           const lx = x + dx, ly = top + dy, lz = z + dz;
           if (vox[vi(lx, ly, lz)] === 0) vox[vi(lx, ly, lz)] = LEAVES;
         }
@@ -1354,22 +1378,22 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function netherGenerate() {
     vox = new Uint8Array(MC_W * MC_W * MC_H); fl = new Uint8Array(vox.length);
     fluidQ[WATER].clear(); fluidQ[MC_LAVA].clear();
-    const seed = (Math.random() * 1e9) | 0, LAVA_Y = 9;
+    const seed = (rng() * 1e9) | 0, LAVA_Y = 9;
     for (let y = 0; y < MC_H; y++) {
       const t = y / (MC_H - 1), bias = Math.pow(Math.abs(t - 0.45) * 2, 2.2) * 0.55;
       for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
         const j = vi(x, y, z);
         if (y === 0 || y === MC_H - 1) { vox[j] = BEDROCK; continue; }
         const n = vnoise3(x / 26, y / 13, z / 26, seed) * 0.7 + vnoise3(x / 9, y / 7, z / 9, seed + 5) * 0.3;
-        if (n + bias > 0.6) vox[j] = Math.random() < 0.015 ? QUARTZ : NETHERRACK;
+        if (n + bias > 0.6) vox[j] = rng() < 0.015 ? QUARTZ : NETHERRACK;
         else if (y <= LAVA_Y) vox[j] = MC_LAVA;
       }
     }
     for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
-      for (let y = LAVA_Y; y < LAVA_Y + 8; y++) if (vox[vi(x, y, z)] === NETHERRACK && vox[vi(x, y + 1, z)] === 0 && Math.random() < 0.5) vox[vi(x, y, z)] = SOULSAND;
-      if (Math.random() < 0.006) {
+      for (let y = LAVA_Y; y < LAVA_Y + 8; y++) if (vox[vi(x, y, z)] === NETHERRACK && vox[vi(x, y + 1, z)] === 0 && rng() < 0.5) vox[vi(x, y, z)] = SOULSAND;
+      if (rng() < 0.006) {
         let y = MC_H - 2; while (y > LAVA_Y && vox[vi(x, y, z)] !== 0) y--;
-        if (y > LAVA_Y + 6) for (let k = 0; k < 8; k++) { const a = x + ((Math.random() * 3) | 0) - 1, c = z + ((Math.random() * 3) | 0) - 1, b = y - ((Math.random() * 3) | 0); if (inMC(a, b, c) && vox[vi(a, b, c)] === 0) vox[vi(a, b, c)] = 6; }
+        if (y > LAVA_Y + 6) for (let k = 0; k < 8; k++) { const a = x + ((rng() * 3) | 0) - 1, c = z + ((rng() * 3) | 0) - 1, b = y - ((rng() * 3) | 0); if (inMC(a, b, c) && vox[vi(a, b, c)] === 0) vox[vi(a, b, c)] = 6; }
       }
     }
   }
@@ -1389,12 +1413,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       arrive = to === "nether" || (to === "over" && from === "nether") ? dims[to].portalPos : { ...spawn };
       needExit = true;
     } else if (to === "nether") {
-      netherGenerate();
-      const fx = Math.max(4, Math.min(MC_W - 9, Math.floor(player.x) - 1)), fz = Math.max(5, Math.min(MC_W - 6, Math.floor(player.z)));
+      seedRng(worldSeed + 1); netherGenerate(); rng = Math.random;
+      const fx = 62, fz = 64;
       placeFrame(fx, 22, fz, true, NETHERRACK);
       arrive = { x: fx + 2, y: 22, z: fz + 2.5 }; needExit = false; Object.assign(spawn, arrive);
     } else {
-      endGenerate(); arrive = { ...spawn }; needExit = false;
+      seedRng(worldSeed + 2); endGenerate(); rng = Math.random; arrive = { ...spawn }; needExit = false;
     }
     fluidQ[WATER].clear(); fluidQ[MC_LAVA].clear();
     mcBuildAll(); applyAtmosphere("mc"); underwater = 0;
@@ -1763,7 +1787,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       const { cx, y, cz } = endFrame; let filled = 0;
       for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) { const ax = Math.abs(dx), az = Math.abs(dz); if ((ax === 2) !== (az === 2) && mcGet(cx + dx, y, cz + dz) === END_FRAME_EYE) filled++; }
       if (filled === 12) {
-        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) { vox[vi(cx + dx, y, cz + dz)] = END_PORTAL; dirtyChunk(cx + dx, cz + dz); }
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) { vox[vi(cx + dx, y, cz + dz)] = END_PORTAL; dirtyChunk(cx + dx, cz + dz); netRecord(0, cx + dx, y, cz + dz, END_PORTAL); }
         flushChunks(); toast("Портал в Энд открыт");
       } else toast(`Око вставлено: ${filled} из 12`);
     }
@@ -1771,7 +1795,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   function endGenerate() {
     vox = new Uint8Array(MC_W * MC_W * MC_H); fl = new Uint8Array(vox.length);
-    const seed = (Math.random() * 1e9) | 0;
+    const seed = (rng() * 1e9) | 0;
     for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
       const d = Math.hypot(x - EC, z - EC), r = 34 + (vnoise(x / 9, z / 9, seed) - 0.5) * 8;
       if (d >= r) continue;
@@ -1997,10 +2021,192 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     shake = Math.max(shake, 0.3);
   }
 
+  // ---------- network play: shared world through the page's room ----------
+  // The creator's presence carries the world spec (kind, size, seed, mode); everyone builds the same world from it.
+  // Block edits go out on the "blk" topic; the creator keeps a log and replays it to late joiners who say "hello".
+  const net = { room: null, lobby: null, user: null, role: null, code: "", spec: null, specV: 0, log: [], queue: [], flushT: 0, presT: 0, avatars: new Map(), names: {}, waiting: false, waitT: 0 };
+  let netApplying = false;
+  const NET_ALPHA = "abcdefghjkmnpqrstuvwxyz23456789";
+  const dimCode = () => (worldKind === "maze" ? 9 : dim === "over" ? 0 : dim === "nether" ? 1 : 2);
+  const worldKey = () => (net.spec ? net.spec.k + ":" + net.spec.s : "");
+  function netRecord(d, x, y, z, id) {
+    if (!net.room || netApplying || !net.spec) return;
+    const e = [d, x, y, z, id];
+    net.queue.push(e);
+    if (net.role === "host") { net.log.push(e); if (net.log.length > 4000) net.log.splice(0, net.log.length - 4000); }
+  }
+  function netGuestBlock() {
+    if (net.role !== "guest") return false;
+    toast("Мир выбирает создатель игры"); return true;
+  }
+  function setNetUi() {
+    const on = !!net.room;
+    $("bHost").hidden = $("bJoin").hidden = on; $("netCode").closest("label").hidden = on; $("bLeave").hidden = !on;
+    const chip = $("tNet"); chip.hidden = !on;
+    if (on) {
+      const n = net.room.peers().length || 1;
+      chip.textContent = `Сеть: код ${net.code} · игроков ${n}`;
+      $("netInfo").textContent = net.role === "host"
+        ? `Код игры: ${net.code}. Скажите его друзьям, потом выберите мир ниже.`
+        : net.waiting ? `Код ${net.code}: ждём, когда создатель игры выберет мир…` : `Вы в игре ${net.code}. Мир выбирает её создатель.`;
+    }
+    document.querySelectorAll(".size").forEach((b) => b.classList.toggle("locked", net.role === "guest"));
+  }
+  async function netInit() {
+    const [room, user] = await Promise.all([window.claude?.use?.("room") ?? null, window.claude?.use?.("user") ?? null]);
+    net.lobby = room; net.user = user;
+    if (!room) { $("netInfo").textContent = "Здесь сетевая игра недоступна. Она работает на claude.ai у тех, с кем вы поделились этой страницей."; return; }
+    $("netInfo").textContent = "Создайте игру и скажите друзьям код, или введите код друга.";
+    ["bHost", "bJoin", "netCode"].forEach((id) => ($(id).disabled = false));
+  }
+  async function netJoin(code, role) {
+    if (!net.lobby) return;
+    try {
+      const r = await net.lobby.join("g-" + code);
+      Object.assign(net, { room: r, role, code, log: [], queue: [], spec: null, specV: 0, waiting: role === "guest", waitT: 12 });
+      r.on("blk", onBlk, () => {});
+      r.on("hello", (m) => { if (net.role === "host" && !m.sameTab && m.data && m.data.w === worldKey()) sendLog(); }, () => {});
+      r.onPeers(onPeers, () => {});
+      if (role === "host") toast("Игра создана. Код: " + code);
+      setNetUi();
+    } catch (e) { toast("Не удалось подключиться. Попробуйте ещё раз"); }
+  }
+  async function netLeave() {
+    if (net.room) { try { await net.room.leave(); } catch (e) {} }
+    net.avatars.forEach((a) => scene.remove(a.g)); net.avatars.clear();
+    Object.assign(net, { room: null, role: null, code: "", spec: null, waiting: false, log: [], queue: [] });
+    setNetUi(); $("netInfo").textContent = "Создайте игру и скажите друзьям код, или введите код друга.";
+  }
+  function netWorldStarted() {
+    if (!net.room) return;
+    if (net.role === "host") {
+      net.spec = { k: worldKind, n: N, s: worldSeed, m: gameMode, v: ++net.specV };
+      net.log = []; net.queue = [];
+      net.room.presence({ spec: net.spec }).catch(() => {});
+    }
+  }
+  function startFromSpec(spec) {
+    net.spec = spec; net.specV = spec.v; net.waiting = false; nextSeed = spec.s;
+    if (spec.k === "maze") newGame(spec.n); else enterMC(spec.m === "survival" ? "survival" : "creative");
+    net.room.emit("hello", { w: worldKey() }).catch(() => {});
+    setNetUi(); toast("Вы в сетевой игре " + net.code);
+  }
+  function validSpec(sp) {
+    return sp && (sp.k === "maze" || sp.k === "mc") && Number.isInteger(sp.s) && Number.isInteger(sp.v) && (sp.k !== "maze" || [12, 25, 45].includes(sp.n));
+  }
+  function onPeers(change) {
+    for (const p of change.left) { const a = net.avatars.get(p.peer); if (a) { scene.remove(a.g); net.avatars.delete(p.peer); } }
+    if (net.role === "guest") {
+      const host = change.peers.find((p) => !p.sameTab && p.presence && validSpec(p.presence.spec));
+      if (host && host.presence.spec.v !== net.specV) startFromSpec(host.presence.spec);
+    }
+    const ids = change.peers.filter((p) => !p.sameTab && p.by).map((p) => p.by);
+    if (ids.length && net.user) net.user.profiles(ids).then((ps) => { for (const id in ps) net.names[id] = ps[id]; }).catch(() => {});
+    setNetUi();
+  }
+  function sendLog() {
+    const all = net.log.slice(), w = worldKey();
+    for (let i = 0, k = 0; i < all.length; i += 150, k++) {
+      const part = all.slice(i, i + 150);
+      setTimeout(() => net.room && net.room.emit("blk", { w, e: part }).catch(() => {}), k * 150);
+    }
+  }
+  function applyEdit(e) {
+    if (!Array.isArray(e) || e.length !== 5 || !e.every(Number.isInteger)) return;
+    const [d, x, y, z, id] = e;
+    if (d === 9) {
+      if (worldKind !== "maze" || x < 0 || z < 0 || x >= G * S || z >= G * S || y < 0 || y > 40 || id < -1 || id >= BLOCKS.length) return;
+      setBlock(x, y, z, id < 0 ? null : id);
+      return;
+    }
+    if (worldKind !== "mc" || d < 0 || d > 2 || !inMC(x, y, z) || id < 0 || (id && !MCB[id])) return;
+    const dn = ["over", "nether", "end"][d];
+    if (dn === dim) {
+      mcSet(x, y, z, id);
+      if (id === MC_TNT) tnts.push({ k: vkey(x, y, z), x, y, z, t: 3 });
+    } else if (dims[dn] && dims[dn].vox) { dims[dn].vox[vi(x, y, z)] = id; dims[dn].fl[vi(x, y, z)] = 0; }
+  }
+  function onBlk(m) {
+    if (m.sameTab || !m.data || m.data.w !== worldKey() || !Array.isArray(m.data.e)) return;
+    netApplying = true;
+    try { for (const e of m.data.e.slice(0, 300)) applyEdit(e); } finally { netApplying = false; }
+    if (net.role === "host") { for (const e of m.data.e.slice(0, 300)) net.log.push(e); if (net.log.length > 4000) net.log.splice(0, net.log.length - 4000); }
+  }
+  function netTick(dt) {
+    if (!net.room) return;
+    net.flushT -= dt; net.presT -= dt;
+    if (net.queue.length && net.flushT <= 0 && net.spec) {
+      net.flushT = 0.12;
+      net.room.emit("blk", { w: worldKey(), e: net.queue.splice(0, 150) }).catch(() => {});
+    }
+    if (net.presT <= 0) {
+      net.presT = 0.1;
+      const r2 = (v) => Math.round(v * 100) / 100;
+      net.room.presence({ p: [r2(player.x), r2(player.y), r2(player.z), r2(player.yaw)], d: dimCode(), w: worldKey(), f: flying ? 1 : 0 }).catch(() => {});
+    }
+  }
+  function nameSprite(text, color) {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 64;
+    const x = c.getContext("2d");
+    x.font = "600 30px Golos Text, sans-serif"; const w = Math.min(244, x.measureText(text).width + 28);
+    x.fillStyle = "rgba(20,20,26,0.75)"; x.fillRect(128 - w / 2, 8, w, 46);
+    x.fillStyle = color; x.fillRect(128 - w / 2, 50, w, 4);
+    x.fillStyle = "#f1eadb"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(text, 128, 31, 230);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+    sp.scale.set(1.6, 0.4, 1); sp.position.y = 2.35; sp.renderOrder = 5;
+    return sp;
+  }
+  function makeAvatar(color) {
+    const g = new THREE.Group(), body = new THREE.MeshLambertMaterial({ color }), skin = new THREE.MeshLambertMaterial({ color: 0xe8c39a }), pants = new THREE.MeshLambertMaterial({ color: 0x2f3550 });
+    const P = (parent, w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(unitBox, mat); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+    const L2 = (w, h, d, mat, x, y) => { const pv = new THREE.Group(); pv.position.set(x, y, 0); g.add(pv); P(pv, w, h, d, mat, 0, -h / 2, 0); return pv; };
+    const legs = [L2(0.24, 0.75, 0.24, pants, -0.13, 0.75), L2(0.24, 0.75, 0.24, pants, 0.13, 0.75)];
+    P(g, 0.52, 0.72, 0.28, body, 0, 1.11, 0);
+    P(g, 0.46, 0.46, 0.46, skin, 0, 1.72, 0);
+    P(g, 0.08, 0.08, 0.02, new THREE.MeshBasicMaterial({ color: 0x1d1406 }), -0.1, 1.75, 0.24); P(g, 0.08, 0.08, 0.02, new THREE.MeshBasicMaterial({ color: 0x1d1406 }), 0.1, 1.75, 0.24);
+    const arms = [L2(0.2, 0.7, 0.2, body, -0.36, 1.45), L2(0.2, 0.7, 0.2, body, 0.36, 1.45)];
+    scene.add(g);
+    return { g, legs, arms, phase: 0, label: null, labelFor: "", tx: 0, ty: 0, tz: 0, tyaw: 0, init: false };
+  }
+  function netAvatars(dt) {
+    if (!net.room) return;
+    const peers = net.room.peers(), wk = worldKey(), dc = dimCode(), live = state === "play" || state === "pause" || state === "inv";
+    for (const p of peers) {
+      if (p.sameTab || p.kind !== "viewer") continue;
+      const pr = p.presence || {}, pos = pr.p;
+      let a = net.avatars.get(p.peer);
+      const prof = p.by ? net.names[p.by] : null;
+      if (!a) { a = makeAvatar(prof ? prof.color : "#55c8ff"); net.avatars.set(p.peer, a); }
+      const ok = live && Array.isArray(pos) && pos.length === 4 && pos.every(Number.isFinite) && pr.w === wk && pr.d === dc;
+      a.g.visible = ok;
+      if (!ok) continue;
+      const name = (prof && prof.name) || (p.guest ? "Гость" : "Игрок");
+      if (a.labelFor !== name) { if (a.label) a.g.remove(a.label); a.label = nameSprite(name, prof ? prof.color : "#55c8ff"); a.g.add(a.label); a.labelFor = name; }
+      [a.tx, a.ty, a.tz, a.tyaw] = pos;
+      if (!a.init) { a.g.position.set(a.tx, a.ty, a.tz); a.init = true; }
+      const ox = a.g.position.x, oz = a.g.position.z, k = Math.min(1, dt * 10);
+      a.g.position.x += (a.tx - ox) * k; a.g.position.y += (a.ty - a.g.position.y) * k; a.g.position.z += (a.tz - oz) * k;
+      a.g.rotation.y = lerpAngle(a.g.rotation.y, a.tyaw + Math.PI, k);
+      a.phase += Math.hypot(a.g.position.x - ox, a.g.position.z - oz) * 3;
+      const sw = pr.f ? 0 : Math.sin(a.phase) * 0.7;
+      a.legs[0].rotation.x = sw; a.legs[1].rotation.x = -sw; a.arms[0].rotation.x = -sw; a.arms[1].rotation.x = sw;
+    }
+    if (net.waiting) { net.waitT -= dt; if (net.waitT <= 0) { net.waiting = false; toast("Игра с таким кодом не найдена или её создатель ещё не выбрал мир"); setNetUi(); net.waitT = 1e9; } }
+  }
+  $("bHost").addEventListener("click", () => { let c = ""; for (let i = 0; i < 4; i++) c += NET_ALPHA[(Math.random() * NET_ALPHA.length) | 0]; netJoin(c, "host"); });
+  $("bJoin").addEventListener("click", () => {
+    const c = $("netCode").value.trim().toLowerCase();
+    if (!/^[a-z0-9]{4}$/.test(c)) { toast("Введите код из 4 знаков"); return; }
+    netJoin(c, "guest");
+  });
+  $("netCode").addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") $("bJoin").click(); });
+  $("bLeave").addEventListener("click", netLeave);
+  netInit();
+
   // ---------- game flow ----------
   function newGame(n) {
     N = n; resetCommon("maze");
-    generate(n); build();
+    seedRng(takeSeed()); generate(n); rng = Math.random; build();
     Object.assign(player, { x: cc(startCell[0]), z: cc(startCell[1]), y: 0, vy: 0, pitch: 0, kx: 0, kz: 0, hp: 10 });
     player.yaw = !grid[idx(2, 1)] ? -Math.PI / 2 : Math.PI;
     Object.assign(spawn, { x: player.x, y: 0, z: player.z });
@@ -2009,6 +2215,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     reveal();
     showHud();
     toast(touchUI ? "Утро. Найдите голубой маяк" : "Утро. Щёлкните, чтобы управлять мышью");
+    netWorldStarted();
   }
   function showHud() {
     ["menu", "win", "pause"].forEach((i) => ($(i).hidden = true));
@@ -2034,11 +2241,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     gameMode = gm === "survival" ? "survival" : "creative";
     if (gameMode === "survival") { inv = {}; hotbar = Array(9).fill(0); food = 20; dayT = 0.02; dayF = 1; spawnT = 4; starveT = 4; }
     dim = "over"; dims = {}; portalT = 0; needExit = false;
-    mcGenerate(); mcBuildAll(); applyAtmosphere("mc");
+    seedRng(takeSeed()); mcGenerate(); rng = Math.random; mcBuildAll(); applyAtmosphere("mc");
     Object.assign(player, { x: spawn.x, y: spawn.y, z: spawn.z, vy: 0, pitch: -0.05, yaw: Math.PI, kx: 0, kz: 0, hp: 10 });
     peakY = spawn.y;
     showHud();
     toast(gameMode === "survival" ? "Выживание. Зажмите ЛКМ на стволе дерева, чтобы добыть его" : "Мир Minecraft. Впереди портал в Nether");
+    netWorldStarted();
   }
   function pauseGame() {
     if (state !== "play") return;
@@ -2187,7 +2395,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   tap("tRun", () => { touchRun = !touchRun; $("tRun").classList.toggle("main", touchRun); });
 
-  document.querySelectorAll(".size").forEach((b) => b.addEventListener("click", () => newGame(+b.dataset.n)));
+  document.querySelectorAll(".size[data-n]").forEach((b) => b.addEventListener("click", () => { if (!netGuestBlock()) newGame(+b.dataset.n); }));
   $("bMap").addEventListener("click", toggleMap);
   $("bHint").addEventListener("click", hint);
   $("bMode").addEventListener("click", toggleMode);
@@ -2196,13 +2404,13 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   $("bAggro").addEventListener("click", () => { aggressive = !aggressive; $("bAggro").textContent = "Монстры нападают: " + (aggressive ? "да" : "нет"); });
   $("bClearMobs").addEventListener("click", () => { clearMonsters(); $("pauseInfo").textContent = "Все монстры убраны."; });
   $("bClearBlocks").addEventListener("click", () => { clearBlocks(); $("pauseInfo").textContent = "Все поставленные блоки убраны."; });
-  $("bRestart").addEventListener("click", () => (worldKind === "mc" ? enterMC(gameMode) : newGame(N)));
-  $("bMC").addEventListener("click", () => enterMC("creative"));
-  $("bMCS").addEventListener("click", () => enterMC("survival"));
+  $("bRestart").addEventListener("click", () => { if (!netGuestBlock()) worldKind === "mc" ? enterMC(gameMode) : newGame(N); });
+  $("bMC").addEventListener("click", () => { if (!netGuestBlock()) enterMC("creative"); });
+  $("bMCS").addEventListener("click", () => { if (!netGuestBlock()) enterMC("survival"); });
   $("bInv").addEventListener("click", () => { unlockPointer(); toggleInv(); });
   $("bInvClose").addEventListener("click", toggleInv);
   $("bMenu").addEventListener("click", toMenu);
-  $("bAgain").addEventListener("click", () => newGame(N));
+  $("bAgain").addEventListener("click", () => { if (!netGuestBlock()) newGame(N); });
   $("bMenu2").addEventListener("click", toMenu);
   $("bigmap").addEventListener("click", toggleMap);
 
@@ -2462,6 +2670,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       updateMonsters(dt, now);
       updateEffects(dt, now);
       if (worldKind === "mc") updateEnd(dt, now);
+      netTick(dt);
       $("tTime").textContent = fmt(elapsed);
       $("hpBar").style.width = (player.hp * 10) + "%";
       if (worldKind === "mc") {
@@ -2514,6 +2723,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       } else outline.visible = false;
     }
     renderer.render(scene, camera);
+    netAvatars(dt);
     if (state === "play" || state === "pause") { drawMini(now); if (!$("bigmap").hidden) drawBig(now); }
   }
 
