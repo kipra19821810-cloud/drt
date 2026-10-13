@@ -130,6 +130,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   <button type="button" id="tUse" class="main">Поставить</button>
   <button type="button" id="tRun">Бег</button>
   <button type="button" id="tHit">Удар</button>
+  <button type="button" id="tFly">Полёт</button>
+  <button type="button" id="tDown">Вниз</button>
 </div>
 <div class="toast" id="toast"></div>
 <div id="stick" hidden><i id="knob"></i></div>
@@ -150,7 +152,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       <button class="size big" type="button" data-n="45"><b>Огромный</b><span>91 × 91 клеток</span><span class="best" data-best="45">рекорда нет</span></button>
     </div>
     <dl class="controls">
-      <dt>WASD · Пробел</dt><dd>идти и прыгать, Shift — бежать</dd>
+      <dt>WASD · Пробел</dt><dd>идти и прыгать: в воздухе можно прыгнуть ещё раз, зажатый пробел — прыжки подряд. Shift — бежать</dd>
+      <dt>V или 2× Пробел</dt><dd>полёт: Пробел — вверх, C — вниз, Shift — быстрее</dd>
       <dt>ЛКМ или E</dt><dd>поставить блок или призвать монстра туда, куда смотрите</dd>
       <dt>ПКМ или F</dt><dd>ударить монстра или сломать поставленный блок</dd>
       <dt>1–8 · колесо · Q</dt><dd>выбрать блок или монстра · переключить блоки и монстров</dd>
@@ -420,6 +423,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   let state = "menu";
   let elapsed = 0, dist = 0, hints = 0, kills = 0, hintUntil = 0, hintPath = [], bob = 0, shake = 0;
   let mode = "blocks", selBlock = 0, selMob = 0, aggressive = true;
+  let flying = false, airJumps = 1, lastSpace = 0, touchUp = false, touchDown = false;
   const blocks = new Map(); // voxel key -> block type index
   let tnts = []; // {k, x, y, z, t}
   let monsters = [], particles = [], flashes = [];
@@ -755,6 +759,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (mode === "blocks") { if (i < BLOCKS.length) selBlock = i; } else if (i < MONSTERS.length) selMob = i;
     renderHotbar();
   }
+  function toggleFly() {
+    if (state !== "play") return;
+    flying = !flying; player.vy = 0;
+    $("tFly").classList.toggle("main", flying);
+    toast(flying ? "Полёт: Пробел — вверх, C — вниз" : "Полёт выключен");
+  }
   function toggleMode() { mode = mode === "blocks" ? "mobs" : "blocks"; renderHotbar(); toast(mode === "blocks" ? "Режим: блоки" : "Режим: монстры"); }
 
   // held block in the right hand
@@ -772,6 +782,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     Object.assign(player, { x: cc(startCell[0]), z: cc(startCell[1]), y: 0, vy: 0, pitch: 0, kx: 0, kz: 0, hp: 10 });
     player.yaw = !grid[idx(2, 1)] ? -Math.PI / 2 : Math.PI;
     elapsed = 0; dist = 0; hints = 0; kills = 0; hintUntil = 0; hintPath = [];
+    flying = false; $("tFly").classList.remove("main");
     reveal();
     ["menu", "win", "pause"].forEach((i) => ($(i).hidden = true));
     ["hud", "side", "hotbar", "cross"].forEach((i) => ($(i).hidden = false));
@@ -867,7 +878,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       if (k === "KeyE") return use();
       if (k === "KeyF") return attack();
       if (/^Digit[1-9]$/.test(k)) return select(+k.slice(5) - 1);
-      if (k === "Space") { jumpQ = true; e.preventDefault(); return; }
+      if (k === "Space") {
+        e.preventDefault(); keys.add(k);
+        if (!e.repeat) { const t = performance.now(); if (t - lastSpace < 300) { lastSpace = 0; toggleFly(); } else { lastSpace = t; jumpQ = true; } }
+        return;
+      }
+      if (k === "KeyV") return toggleFly();
     }
     if (k === "Escape" || k === "KeyP") { if (state === "play") pauseGame(); else if (state === "pause" && k === "KeyP") resume(); return; }
     if (state === "play") { keys.add(k); if (k.startsWith("Arrow")) e.preventDefault(); }
@@ -904,7 +920,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   };
   canvas.addEventListener("touchend", endTouch); canvas.addEventListener("touchcancel", endTouch);
   const tap = (id, fn) => $(id).addEventListener("pointerdown", (e) => { e.preventDefault(); fn(); });
-  tap("tJump", () => (jumpQ = true)); tap("tUse", use); tap("tHit", attack);
+  tap("tJump", () => { jumpQ = true; touchUp = true; }); tap("tDown", () => (touchDown = true));
+  tap("tUse", use); tap("tHit", attack); tap("tFly", toggleFly);
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) {
+    $("tJump").addEventListener(ev, () => (touchUp = false));
+    $("tDown").addEventListener(ev, () => (touchDown = false));
+  }
   tap("tRun", () => { touchRun = !touchRun; $("tRun").classList.toggle("main", touchRun); });
 
   document.querySelectorAll(".size").forEach((b) => b.addEventListener("click", () => newGame(+b.dataset.n)));
@@ -982,13 +1003,28 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (stick.id !== null) { f -= stick.vy; s += stick.vx; }
     const len = Math.hypot(f, s); if (len > 1) { f /= len; s /= len; }
     const run = keys.has("ShiftLeft") || keys.has("ShiftRight") || touchRun;
-    const sp = (run ? RUN : WALK) * dt, sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+    const sp = (run ? RUN : WALK) * dt * (flying ? 1.8 : 1), sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
     const dx = (-sin * f + cos * s) * sp + player.kx * dt, dz = (-cos * f - sin * s) * sp + player.kz * dt;
     const decay = Math.pow(0.004, dt); player.kx *= decay; player.kz *= decay;
-    if (jumpQ && player.onGround) player.vy = JUMP;
-    jumpQ = false;
+    const up = keys.has("Space") || touchUp, down = keys.has("KeyC") || keys.has("ControlLeft") || touchDown;
     const ox = player.x, oz = player.z;
-    physics(player, dx, dz, dt);
+    if (flying) {
+      player.vy = 0; player.onGround = false;
+      if (dx && !collides(player.x + dx, player.y, player.z, PR, PH)) player.x += dx;
+      if (dz && !collides(player.x, player.y, player.z + dz, PR, PH)) player.z += dz;
+      const vy = ((up ? 1 : 0) - (down ? 1 : 0)) * (run ? 11 : 6) * dt;
+      if (vy) {
+        const ny = Math.min(60, player.y + vy);
+        if (!collides(player.x, ny, player.z, PR, PH)) player.y = ny;
+        else if (vy < 0) { flying = false; $("tFly").classList.remove("main"); toast("Приземление"); }
+      }
+    } else {
+      if (player.onGround) airJumps = 1;
+      if ((jumpQ || up) && player.onGround) player.vy = JUMP;
+      else if (jumpQ && airJumps > 0) { player.vy = JUMP * 0.9; airJumps--; }
+      physics(player, dx, dz, dt);
+    }
+    jumpQ = false;
     if (player.y < -5) Object.assign(player, { x: cc(startCell[0]), z: cc(startCell[1]), y: 0, vy: 0 });
     const moved = Math.hypot(player.x - ox, player.z - oz);
     dist += moved; if (player.onGround) bob += moved * 2.4;
@@ -1111,7 +1147,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       $("hpBar").style.width = (player.hp * 10) + "%";
       const gx = Math.floor(player.x / S), gz = Math.floor(player.z / S);
       const left = gx >= 0 && gz >= 0 && gx < G && gz < G ? distExit[idx(gx, gz)] : -1;
-      $("tSub").textContent = `${Math.round(dist)} м пройдено · ${G}×${G}` + (now < hintUntil && left >= 0 ? ` · до выхода ${left * S} м` : "");
+      $("tSub").textContent = `${Math.round(dist)} м пройдено · ${G}×${G}` + (now < hintUntil && left >= 0 ? ` · до выхода ${left * S} м` : "") + (flying ? " · полёт" : "");
       $("tMob").textContent = `Монстров: ${monsters.length} · блоков: ${blocks.size}`;
     } else if (state === "menu") {
       player.yaw += dt * 0.06;
