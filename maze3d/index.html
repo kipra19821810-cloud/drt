@@ -89,9 +89,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
 .world.mc { border-color: rgba(110,170,80,0.6); }
 .world.net { border-color: rgba(85,200,255,0.55); }
 .net-code { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
-.net-code input { width: 5.5em; font: 600 16px var(--f-mono); letter-spacing: 0.12em; text-transform: lowercase; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
+.net-code input { width: 5.5em; font: 600 16px var(--f-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
 .net-code input:focus-visible { outline: 2px solid var(--portal); outline-offset: 1px; }
-.net-chip { color: var(--portal) !important; }
+.net-chip { color: var(--portal) !important; font-size: 15px !important; font-weight: 600; letter-spacing: 0.04em; }
+.net-chip b { font-size: 20px; letter-spacing: 0.14em; color: var(--ink); }
+.net-big { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border: 1px solid rgba(85,200,255,0.55); border-radius: 4px; color: var(--dim); font-size: 13px; }
+.net-big b { font: 600 30px var(--f-mono); letter-spacing: 0.18em; color: var(--portal); }
 .mc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .mc-row .size { flex-direction: row; align-items: center; gap: 12px; }
 .mc-txt { display: flex; flex-direction: column; gap: 4px; }
@@ -207,7 +210,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     <div class="w-head"><b>Игра по сети</b><span id="netInfo">проверяем, можно ли играть вместе…</span></div>
     <div class="mc-row" id="netRow">
       <button class="btn primary" id="bHost" type="button" disabled>Создать игру</button>
-      <label class="net-code"><span>Код</span><input id="netCode" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ab3k" disabled></label>
+      <label class="net-code"><span>Код</span><input id="netCode" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="AB3K" disabled></label>
       <button class="btn" id="bJoin" type="button" disabled>Войти</button>
       <button class="btn" id="bLeave" type="button" hidden>Выйти из сетевой игры</button>
     </div>
@@ -242,6 +245,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     <div class="eyebrow">Пауза</div>
     <h2>Лабиринт ждёт</h2>
     <p class="lead" id="pauseInfo"></p>
+    <div class="net-big" id="pauseNet" hidden><span>Код сетевой игры</span><b id="pauseCode"></b><button class="btn" id="bCopyCode" type="button">Скопировать</button><span id="pausePlayers"></span></div>
     <div class="row">
       <button class="btn primary" id="bResume" type="button">Продолжить</button>
       <button class="btn" id="bAggro" type="button">Монстры нападают: да</button>
@@ -2042,13 +2046,15 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function setNetUi() {
     const on = !!net.room;
     $("bHost").hidden = $("bJoin").hidden = on; $("netCode").closest("label").hidden = on; $("bLeave").hidden = !on;
-    const chip = $("tNet"); chip.hidden = !on;
+    const chip = $("tNet"); chip.hidden = !on; $("pauseNet").hidden = !on;
     if (on) {
       const n = net.room.peers().length || 1;
-      chip.textContent = `Сеть: код ${net.code} · игроков ${n}`;
+      chip.textContent = "Код: ";
+      const cb = document.createElement("b"); cb.textContent = net.code.toUpperCase(); chip.append(cb, ` · игроков ${n}`);
+      $("pauseCode").textContent = net.code.toUpperCase(); $("pausePlayers").textContent = `игроков: ${n}`;
       $("netInfo").textContent = net.role === "host"
-        ? `Код игры: ${net.code}. Скажите его друзьям, потом выберите мир ниже.`
-        : net.waiting ? `Код ${net.code}: ждём, когда создатель игры выберет мир…` : `Вы в игре ${net.code}. Мир выбирает её создатель.`;
+        ? `Код игры: ${net.code.toUpperCase()}. Скажите его друзьям, потом выберите мир ниже.`
+        : net.waiting ? `Код ${net.code.toUpperCase()}: ждём, когда создатель игры выберет мир…` : `Вы в игре ${net.code.toUpperCase()}. Мир выбирает её создатель.`;
     }
     document.querySelectorAll(".size").forEach((b) => b.classList.toggle("locked", net.role === "guest"));
   }
@@ -2067,7 +2073,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       r.on("blk", onBlk, () => {});
       r.on("hello", (m) => { if (net.role === "host" && !m.sameTab && m.data && m.data.w === worldKey()) sendLog(); }, () => {});
       r.onPeers(onPeers, () => {});
-      if (role === "host") toast("Игра создана. Код: " + code);
+      if (role === "host") toast("Код игры: " + code.toUpperCase());
       setNetUi();
     } catch (e) { toast("Не удалось подключиться. Попробуйте ещё раз"); }
   }
@@ -2089,7 +2095,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     net.spec = spec; net.specV = spec.v; net.waiting = false; nextSeed = spec.s;
     if (spec.k === "maze") newGame(spec.n); else enterMC(spec.m === "survival" ? "survival" : "creative");
     net.room.emit("hello", { w: worldKey() }).catch(() => {});
-    setNetUi(); toast("Вы в сетевой игре " + net.code);
+    setNetUi(); toast("Вы в сетевой игре " + net.code.toUpperCase());
   }
   function validSpec(sp) {
     return sp && (sp.k === "maze" || sp.k === "mc") && Number.isInteger(sp.s) && Number.isInteger(sp.v) && (sp.k !== "maze" || [12, 25, 45].includes(sp.n));
@@ -2201,6 +2207,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   });
   $("netCode").addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") $("bJoin").click(); });
   $("bLeave").addEventListener("click", netLeave);
+  $("bCopyCode").addEventListener("click", () => {
+    const done = () => ($("bCopyCode").textContent = "Скопировано");
+    try { navigator.clipboard.writeText(net.code).then(done, () => window.getSelection().selectAllChildren($("pauseCode"))); }
+    catch (e) { window.getSelection().selectAllChildren($("pauseCode")); }
+    setTimeout(() => ($("bCopyCode").textContent = "Скопировать"), 2000);
+  });
   netInit();
 
   // ---------- game flow ----------
