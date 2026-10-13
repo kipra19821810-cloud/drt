@@ -54,6 +54,7 @@ body { background: var(--night); color: var(--ink); font-family: var(--f-body); 
 .crosshair::before, .crosshair::after { content: ""; position: absolute; background: var(--ink); box-shadow: 0 0 2px #000; }
 .crosshair::before { left: 7px; top: 0; width: 2px; height: 16px; }
 .crosshair::after { top: 7px; left: 0; height: 2px; width: 16px; }
+#portalFx { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at center, rgba(150,60,230,0.35), rgba(90,20,170,0.9)); opacity: 0; }
 #hurt { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at center, transparent 45%, rgba(216,70,58,0.55)); opacity: 0; transition: opacity 0.35s; }
 
 .overlay { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(26,29,36,0.45), rgba(26,29,36,0.88)); overflow-y: auto; }
@@ -130,6 +131,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
 
 <canvas id="view"></canvas>
 <div id="hurt"></div>
+<div id="portalFx"></div>
 <div class="crosshair" id="cross" hidden></div>
 
 <div class="hud stats" id="hud" hidden>
@@ -183,7 +185,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     </div>
     </div>
     <div class="world mc">
-    <div class="w-head"><b>Minecraft</b><span>холмы, леса, озёра, руды в глубине · 128 × 128 блоков</span></div>
+    <div class="w-head"><b>Minecraft</b><span>холмы, леса, озёра, руды · рядом со стартом стоит портал в Nether</span></div>
     <div class="mc-row">
       <button class="size" type="button" id="bMC"><canvas id="mcIcon" width="32" height="32"></canvas><div class="mc-txt"><b>Творческий</b><span>все блоки, полёт, призыв монстров</span></div></button>
       <button class="size" type="button" id="bMCS"><canvas id="mcIcon2" width="32" height="32"></canvas><div class="mc-txt"><b>Выживание</b><span>добывайте, крафтите, переживите ночь</span></div></button>
@@ -197,6 +199,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       <dt>ПКМ или F</dt><dd>ударить монстра или сломать поставленный блок</dd>
       <dt>Мир Minecraft</dt><dd>как в оригинале: ЛКМ — ломать и бить (можно зажать), ПКМ — ставить. Вода и лава растекаются, а где встречаются, застывают камнем. В воде Пробел — плыть вверх</dd>
       <dt>1–8 · колесо · Q</dt><dd>выбрать блок или монстра · переключить блоки и монстров</dd>
+      <dt>Портал в Nether</dt><dd>рамка из обсидиана 4 × 5, зажгите огнивом (ПКМ) и постойте в сиянии. В выживании обсидиан получается, когда вода попадает на источник лавы</dd>
       <dt>Выживание</dt><dd>зажмите ЛКМ, чтобы добыть блок · E — инвентарь и крафт · ПКМ с едой — съесть · ночью приходят монстры</dd>
       <dt>M · H · Esc</dt><dd>карта · подсказка (+20 с) · пауза</dd>
       <dt>Телефон</dt><dd>левая половина — джойстик, правая — обзор, кнопки справа</dd>
@@ -284,6 +287,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   scene.add(camera);
 
   const SUN_DIR = new THREE.Vector3(0.75, 0.38, 0.45).normalize(); // low morning sun in the east
+  let skyMesh = null;
   const skyU = { sunDir: { value: SUN_DIR }, zen: { value: new THREE.Color(0.42, 0.62, 0.86) }, hor: { value: new THREE.Color(0.98, 0.85, 0.70) } };
   {
     const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), new THREE.ShaderMaterial({
@@ -302,6 +306,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
         "}"].join("\n"),
     }));
     sky.onBeforeRender = () => sky.position.copy(camera.position);
+    skyMesh = sky;
     scene.add(sky);
   }
   const hemi = new THREE.HemisphereLight(0xcfe0f5, 0x6d5a3e, 0.75);
@@ -761,12 +766,14 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     const hit = aim();
     if (mode === "blocks") {
       if (!hit) { toast("Слишком далеко, подойдите ближе"); return; }
+      if (worldKind === "mc" && MC_ITEMS[selBlock] === FLINT) { ignite(hit); return; }
       const { px, py, pz } = hit;
       if (py > (worldKind === "mc" ? MC_H - 1 : 40) || solidType(px, py, pz) !== 0) return;
       const overlaps = (e) => px + 1 > e.x - e.r && px < e.x + e.r && pz + 1 > e.z - e.r && pz < e.z + e.r && py + 1 > e.y && py < e.y + e.h;
       if (overlaps(player) || monsters.some((m) => !m.type.fly && overlaps(m))) return;
       if (worldKind === "mc") {
         const id = MC_ITEMS[selBlock];
+        if (id === WATER && dim === "nether") { burst(px + 0.5, py + 0.5, pz + 0.5, 0xeeeeee, 10, 2); toast("Вода испаряется в Nether"); return; }
         mcSet(px, py, pz, id);
         if (id === MC_TNT) { tnts.push({ k: vkey(px, py, pz), x: px, y: py, z: pz, t: 3 }); toast("Динамит взорвётся через 3 секунды"); }
         return;
@@ -876,7 +883,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (y < 0 || x < 0 || z < 0 || x >= MC_W || z >= MC_W) return -1;
     if (y >= MC_H) return 0;
     const v = vox[vi(x, y, z)];
-    if (v === 0 || v === WATER || v === MC_LAVA) return 0;
+    if (v === 0 || v === WATER || v === MC_LAVA || v === PORTAL) return 0;
     return v === BEDROCK ? -1 : v;
   }
 
@@ -894,9 +901,14 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     cobble: pix((x, n) => { speckle(x, n, [112, 112, 110], 12); x.fillStyle = "#4a4a48"; for (let i = 0; i < 10; i++) { x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(4, 9) | 0, 1); x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, 1, rnd(4, 9) | 0); } x.fillStyle = "rgba(210,210,210,0.35)"; for (let i = 0; i < 12; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, 3, 2); }),
     coal: ore([28, 28, 28]), iron: ore([216, 175, 147]), diamond: ore([92, 219, 213]),
     bedrock: pix((x, n) => speckle(x, n, [70, 70, 70], 40)),
+    obsidian: pix((x, n) => { speckle(x, n, [22, 16, 34], 8); x.fillStyle = "#3d2a5c"; for (let i = 0; i < 14; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(1, 4) | 0, 1); }),
+    netherrack: pix((x, n) => { speckle(x, n, [112, 42, 40], 22); x.fillStyle = "rgba(60,10,10,0.6)"; for (let i = 0; i < 16; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(1, 4) | 0, rnd(1, 3) | 0); }),
+    soulsand: pix((x, n) => { speckle(x, n, [84, 64, 50], 12); x.fillStyle = "#2e2219"; for (let i = 0; i < 4; i++) { const a = rnd(2, n - 8) | 0, b = rnd(2, n - 8) | 0; x.fillRect(a, b, 2, 2); x.fillRect(a + 4, b, 2, 2); x.fillRect(a + 1, b + 4, 4, 2); } }),
+    portal: pix((x, n) => { speckle(x, n, [110, 36, 200], 26); x.fillStyle = "rgba(220,170,255,0.7)"; for (let i = 0; i < 12; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(3, 9) | 0, 1); }),
+    quartz: pix((x, n) => { speckle(x, n, [112, 42, 40], 22); x.fillStyle = "#f1ebe2"; for (let i = 0; i < 7; i++) x.fillRect(rnd(2, n - 5) | 0, rnd(2, n - 4) | 0, rnd(2, 4) | 0, 2); }),
     water: pix((x, n) => { speckle(x, n, [48, 96, 200], 14); x.fillStyle = "rgba(255,255,255,0.2)"; for (let i = 0; i < 10; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(3, 7) | 0, 1); }),
   };
-  const TILES = ["stone", "planks", "grassTop", "grassSide", "dirt", "glass", "gold", "glow", "lava", "tntSide", "tntTop", "sand", "logSide", "logTop", "leaves", "cobble", "coal", "iron", "diamond", "bedrock", "water"];
+  const TILES = ["stone", "planks", "grassTop", "grassSide", "dirt", "glass", "gold", "glow", "lava", "tntSide", "tntTop", "sand", "logSide", "logTop", "leaves", "cobble", "coal", "iron", "diamond", "bedrock", "water", "obsidian", "netherrack", "soulsand", "portal", "quartz"];
   const tileSrc = Object.assign({ stone: C.stone, planks: C.wood, grassTop: C.grassTop, grassSide: C.grassSide, dirt: C.dirt, glass: C.glass, gold: C.gold, glow: C.glow, lava: C.lava, tntSide: C.tntSide, tntTop: C.tntTop }, C2);
   const AT_C = 8, AT_R = 4, tileIdx = {};
   const atlasCanvas = document.createElement("canvas"); atlasCanvas.width = AT_C * 32; atlasCanvas.height = AT_R * 32;
@@ -915,8 +927,14 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   def(13, "Булыжник", "cobble", 0, 0, 0, "#6e6e6c"); def(14, "Угольная руда", "coal", 0, 0, 0, "#585858");
   def(15, "Железная руда", "iron", 0, 0, 0, "#9a8a7a"); def(16, "Алмазная руда", "diamond", 0, 0, 0, "#5cdbd5");
   def(17, "Бедрок", "bedrock", 0, 0, 0, "#444444"); def(18, "Вода", "water", 0, 0, "clear", "#3060c8");
-  const MC_ITEMS = [3, 9, 1, 13, 2, 11, 12, 4, 8, 10, 5, 6, 7, 14, 15, 16, 18];
+  def(19, "Обсидиан", "obsidian", 0, 0, 0, "#1c1426"); def(20, "Незерак", "netherrack", 0, 0, 0, "#6e2a2a");
+  def(21, "Песок душ", "soulsand", 0, 0, 0, "#50402f"); def(22, "Портал", "portal", 0, 0, "portal", "#8a3ad8");
+  def(23, "Кварцевая руда", "quartz", 0, 0, 0, "#b0807a");
+  const OBSIDIAN = 19, NETHERRACK = 20, SOULSAND = 21, PORTAL = 22, QUARTZ = 23, FLINT = 130;
+  const flintIcon = pix((x) => { x.scale(2, 2); x.fillStyle = "#d8d8d4"; x.fillRect(2, 8, 7, 3); x.fillRect(7, 5, 2, 4); x.fillStyle = "#3a3a3a"; x.fillRect(9, 3, 4, 5); x.fillRect(10, 2, 2, 7); x.fillStyle = "#ffb347"; x.fillRect(12, 1, 2, 2); });
+  const MC_ITEMS = [3, 9, 1, 13, 2, 11, 12, 4, 8, 10, 5, 6, 7, 14, 15, 16, 18, 19, FLINT, 20, 21, 23];
   const MC_LIST = MC_ITEMS.map((id) => {
+    if (id === FLINT) return { name: "Огниво", icon: flintIcon, mat: new THREE.MeshLambertMaterial({ map: tex(flintIcon), transparent: true, alphaTest: 0.1 }) };
     const icon = tileSrc[TILES[MCB[id].t[1]]];
     return { name: MCB[id].name, icon, mat: new THREE.MeshLambertMaterial({ map: tex(icon), transparent: MCB[id].kind !== "opaque", alphaTest: 0.1 }) };
   });
@@ -926,6 +944,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     opaque: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, alphaTest: 0.5 }),
     glow: new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true }),
     clear: new THREE.MeshLambertMaterial({ map: atlas, vertexColors: true, transparent: true, opacity: 0.82, depthWrite: false }),
+    portal: new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide }),
   };
   Object.values(mcMats).forEach((m) => (m.userData.keep = true));
 
@@ -944,7 +963,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (n === WATER || n === MC_LAVA) return true;
     const nk = MCB[n].kind;
     if (MCB[id].kind === "clear") return nk === "cut";
-    return nk === "clear" || nk === "cut";
+    return nk === "clear" || nk === "cut" || nk === "portal";
   }
   function fluidH(x, y, z, id) {
     if (mcGet(x, y + 1, z) === id) return 1;
@@ -984,7 +1003,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       g.setAttribute("uv", new THREE.Float32BufferAttribute(b.u, 2));
       g.setAttribute("color", new THREE.Float32BufferAttribute(b.c, 3));
       g.setIndex(b.i); g.computeBoundingSphere();
-      const m = new THREE.Mesh(g, mcMats[k]); m.castShadow = k !== "clear"; m.receiveShadow = true;
+      const m = new THREE.Mesh(g, mcMats[k]); m.castShadow = k === "opaque" || k === "glow"; m.receiveShadow = true;
       world.add(m); meshes.push(m);
     }
     mcChunks[key] = meshes;
@@ -1001,14 +1020,70 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function flushChunks() { dirty.forEach((k) => { const [a, b] = k.split(",").map(Number); buildChunk(a, b); }); dirty.clear(); }
   function mcSet(x, y, z, id) {
     if (x < 0 || z < 0 || x >= MC_W || z >= MC_W || y < 0 || y >= MC_H) return;
-    const j = vi(x, y, z); vox[j] = id; fl[j] = 0;
-    dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z); flushChunks();
+    const j = vi(x, y, z), old = vox[j]; vox[j] = id; fl[j] = 0;
+    dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z);
+    if ((old === OBSIDIAN || old === PORTAL) && id !== old) breakPortalNear(x, y, z);
+    flushChunks();
+  }
+  // a portal collapses when its frame or one of its blocks is broken
+  function breakPortalNear(x, y, z) {
+    const q = [[x + 1, y, z], [x - 1, y, z], [x, y + 1, z], [x, y - 1, z], [x, y, z + 1], [x, y, z - 1]];
+    let n = 0;
+    while (q.length && n < 200) {
+      const [a, b, c] = q.pop();
+      if (mcGet(a, b, c) !== PORTAL) continue;
+      vox[vi(a, b, c)] = 0; dirtyChunk(a, c); n++;
+      q.push([a + 1, b, c], [a - 1, b, c], [a, b + 1, c], [a, b - 1, c], [a, b, c + 1], [a, b, c - 1]);
+    }
+  }
+  // light an obsidian frame: flood the enclosed air in the vertical plane, max 21 cells
+  function ignite(hit) {
+    if (!hit || mcGet(hit.x, hit.y, hit.z) !== OBSIDIAN) { toast("Огнивом зажигают рамку из обсидиана"); return false; }
+    for (const axis of ["x", "z"]) {
+      const start = [hit.px, hit.py, hit.pz];
+      if (mcGet(...start) !== 0) continue;
+      const seen = new Set(), cells = [], st = [start]; let ok = true;
+      while (st.length && ok) {
+        const [a, b, c] = st.pop(), k = a + "," + b + "," + c;
+        if (seen.has(k)) continue; seen.add(k);
+        if (!inMC(a, b, c)) { ok = false; break; }
+        const v = mcGet(a, b, c);
+        if (v === OBSIDIAN) continue;
+        if (v !== 0) { ok = false; break; }
+        cells.push([a, b, c]);
+        if (cells.length > 21) { ok = false; break; }
+        st.push([a, b + 1, c], [a, b - 1, c]);
+        if (axis === "x") st.push([a + 1, b, c], [a - 1, b, c]); else st.push([a, b, c + 1], [a, b, c - 1]);
+      }
+      if (!ok || cells.length < 2) continue;
+      const ys = cells.map((c) => c[1]);
+      if (Math.max(...ys) - Math.min(...ys) < 2) continue;
+      cells.forEach(([a, b, c]) => { vox[vi(a, b, c)] = PORTAL; fl[vi(a, b, c)] = 0; dirtyChunk(a, c); });
+      flushChunks();
+      burst(hit.px + 0.5, hit.py + 0.5, hit.pz + 0.5, 0xb070ff, 14, 2);
+      toast("Портал открыт");
+      return true;
+    }
+    toast("Рамка не замкнута. Нужен прямоугольник из обсидиана, внутри не меньше 2 × 3");
+    return false;
+  }
+  // write an obsidian frame (4 wide, 5 tall) straight into the voxel arrays
+  function placeFrame(fx, y0, fz, lit, floorId) {
+    for (let x = fx - 2; x <= fx + 5; x++) for (let z = fz - 3; z <= fz + 3; z++) {
+      if (!inMC(x, y0, z)) continue;
+      for (let y = y0; y <= y0 + 5 && y < MC_H - 1; y++) { vox[vi(x, y, z)] = 0; fl[vi(x, y, z)] = 0; }
+      if (y0 > 0) { const v = vox[vi(x, y0 - 1, z)]; if (!v || v === WATER || v === MC_LAVA) { vox[vi(x, y0 - 1, z)] = floorId; fl[vi(x, y0 - 1, z)] = 0; } }
+    }
+    for (let x = fx; x <= fx + 3; x++) for (let y = y0; y <= y0 + 4; y++) {
+      const edge = x === fx || x === fx + 3 || y === y0 || y === y0 + 4;
+      vox[vi(x, y, fz)] = edge ? OBSIDIAN : lit ? PORTAL : 0;
+    }
   }
   function mcBlast(cx, cy, cz) {
     for (let x = Math.floor(cx - 3); x <= cx + 3; x++) for (let y = Math.floor(cy - 3); y <= cy + 3; y++) for (let z = Math.floor(cz - 3); z <= cz + 3; z++) {
       if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz) > 3.2 + Math.random() * 0.6) continue;
       const id = mcGet(x, y, z);
-      if (!id || id === BEDROCK || id === WATER || id === MC_LAVA) continue;
+      if (!id || id === BEDROCK || id === WATER || id === MC_LAVA || id === OBSIDIAN || id === PORTAL) continue;
       if (id === MC_TNT) { const k = vkey(x, y, z), t = tnts.find((q) => q.k === k); if (t) { t.t = Math.min(t.t, 0.25); continue; } }
       vox[vi(x, y, z)] = 0; dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z);
     }
@@ -1028,7 +1103,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z);
   }
   // lava meets water: a lava source hardens to stone, flowing lava to cobblestone
-  function harden(x, y, z) { const j = vi(x, y, z); setRaw(x, y, z, fl[j] === 0 ? 1 : 13, 0); burst(x + 0.5, y + 0.9, z + 0.5, 0xdddddd, 5, 1.5); }
+  function harden(x, y, z) { const j = vi(x, y, z); setRaw(x, y, z, fl[j] === 0 ? OBSIDIAN : 13, 0); burst(x + 0.5, y + 0.9, z + 0.5, 0xdddddd, 5, 1.5); }
   function stepFluid(j, F) {
     if (vox[j] !== F) return;
     const x = j % MC_W, z = ((j / MC_W) | 0) % MC_W, y = (j / (MC_W * MC_W)) | 0;
@@ -1081,7 +1156,9 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   const mcTop = document.createElement("canvas"); mcTop.width = mcTop.height = MC_W;
   const mcTopX = mcTop.getContext("2d"), tmpC = new THREE.Color();
   function mcColumn(x, z) {
-    for (let y = MC_H - 1; y >= 0; y--) {
+    let y0 = MC_H - 1;
+    if (dim === "nether") { y0 = MC_H - 3; while (y0 > 0 && vox[vi(x, y0, z)] !== 0) y0--; }
+    for (let y = y0; y >= 0; y--) {
       const id = vox[vi(x, y, z)]; if (!id) continue;
       tmpC.set(MCB[id].color); const k = 0.55 + (y / MC_H) * 0.8;
       mcTopX.fillStyle = `rgb(${Math.min(255, tmpC.r * 255 * k) | 0},${Math.min(255, tmpC.g * 255 * k) | 0},${Math.min(255, tmpC.b * 255 * k) | 0})`;
@@ -1154,6 +1231,61 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     best = best || [MC_W / 2, MC_W / 2];
     let sy = MC_H - 1; while (sy > 0 && (vox[vi(best[0], sy, best[1])] === 0 || vox[vi(best[0], sy, best[1])] === WATER)) sy--;
     Object.assign(spawn, { x: best[0] + 0.5, y: sy + 1, z: best[1] + 0.5 });
+    const fx = Math.max(3, Math.min(MC_W - 8, best[0] - 1)), fz = Math.max(4, Math.min(MC_W - 5, best[1] + 5));
+    placeFrame(fx, sy + 1, fz, gameMode !== "survival", 9);
+  }
+  function hash3(x, y, z, s) { return hash(x + Math.imul(y, 7919), z - Math.imul(y, 104729), s); }
+  function vnoise3(x, y, z, s) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    const sm = (t) => t * t * (3 - 2 * t), u = sm(x - xi), v = sm(y - yi), w = sm(z - zi);
+    const L = (a, b, t) => a + (b - a) * t;
+    const c = (dx, dy, dz) => hash3(xi + dx, yi + dy, zi + dz, s);
+    return L(L(L(c(0, 0, 0), c(1, 0, 0), u), L(c(0, 1, 0), c(1, 1, 0), u), v), L(L(c(0, 0, 1), c(1, 0, 1), u), L(c(0, 1, 1), c(1, 1, 1), u), v), w);
+  }
+  function netherGenerate() {
+    vox = new Uint8Array(MC_W * MC_W * MC_H); fl = new Uint8Array(vox.length);
+    fluidQ[WATER].clear(); fluidQ[MC_LAVA].clear();
+    const seed = (Math.random() * 1e9) | 0, LAVA_Y = 9;
+    for (let y = 0; y < MC_H; y++) {
+      const t = y / (MC_H - 1), bias = Math.pow(Math.abs(t - 0.45) * 2, 2.2) * 0.55;
+      for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
+        const j = vi(x, y, z);
+        if (y === 0 || y === MC_H - 1) { vox[j] = BEDROCK; continue; }
+        const n = vnoise3(x / 26, y / 13, z / 26, seed) * 0.7 + vnoise3(x / 9, y / 7, z / 9, seed + 5) * 0.3;
+        if (n + bias > 0.6) vox[j] = Math.random() < 0.015 ? QUARTZ : NETHERRACK;
+        else if (y <= LAVA_Y) vox[j] = MC_LAVA;
+      }
+    }
+    for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
+      for (let y = LAVA_Y; y < LAVA_Y + 8; y++) if (vox[vi(x, y, z)] === NETHERRACK && vox[vi(x, y + 1, z)] === 0 && Math.random() < 0.5) vox[vi(x, y, z)] = SOULSAND;
+      if (Math.random() < 0.006) {
+        let y = MC_H - 2; while (y > LAVA_Y && vox[vi(x, y, z)] !== 0) y--;
+        if (y > LAVA_Y + 6) for (let k = 0; k < 8; k++) { const a = x + ((Math.random() * 3) | 0) - 1, c = z + ((Math.random() * 3) | 0) - 1, b = y - ((Math.random() * 3) | 0); if (inMC(a, b, c) && vox[vi(a, b, c)] === 0) vox[vi(a, b, c)] = 6; }
+      }
+    }
+  }
+  // dimensions: the overworld and the Nether keep their blocks while you are away
+  let dim = "over", dims = {}, portalT = 0, needExit = false;
+  function travel() {
+    const to = dim === "over" ? "nether" : "over";
+    dims[dim] = { vox, fl, portalPos: { x: player.x, y: player.y, z: player.z }, spawn: { ...spawn } };
+    clearMonsters(); tnts = [];
+    particles.forEach((p) => scene.remove(p.p)); particles = [];
+    disposeWorld(); dim = to;
+    let arrive;
+    if (dims[to]) { vox = dims[to].vox; fl = dims[to].fl; arrive = dims[to].portalPos; needExit = true; Object.assign(spawn, dims[to].spawn); }
+    else {
+      netherGenerate();
+      const fx = Math.max(4, Math.min(MC_W - 9, Math.floor(player.x) - 1)), fz = Math.max(5, Math.min(MC_W - 6, Math.floor(player.z)));
+      placeFrame(fx, 22, fz, true, NETHERRACK);
+      arrive = { x: fx + 2, y: 22, z: fz + 2.5 }; needExit = false; Object.assign(spawn, arrive);
+    }
+    fluidQ[WATER].clear(); fluidQ[MC_LAVA].clear();
+    mcBuildAll(); applyAtmosphere("mc"); underwater = 0;
+    Object.assign(player, { x: arrive.x, y: arrive.y, z: arrive.z, vy: 0, kx: 0, kz: 0 });
+    if (to === "nether") player.yaw = 0;
+    peakY = player.y; portalT = 0; dayF = to === "nether" ? 0 : dayF;
+    toast(to === "nether" ? "Nether" : "Верхний мир");
   }
   const cloudTex = (() => {
     const c = pix((x, n) => { x.fillStyle = "#fff"; for (let i = 0; i < 60; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(2, 8) | 0, rnd(1, 4) | 0); }, 64);
@@ -1162,10 +1294,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function mcBuildAll() {
     world = new THREE.Group(); scene.add(world); mcChunks = [];
     for (let cz = 0; cz < MC_W / CH; cz++) for (let cx = 0; cx < MC_W / CH; cx++) buildChunk(cx, cz);
+    clouds = null; stars = null;
+    if (dim === "over") {
     clouds = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.85, depthWrite: false, fog: false, side: THREE.DoubleSide }));
     clouds.rotation.x = -Math.PI / 2; clouds.position.set(MC_W / 2, 72, MC_W / 2); world.add(clouds);
-    stars = null;
     if (gameMode === "survival") { stars = makeStars(); world.add(stars); }
+    }
     mcTopX.clearRect(0, 0, MC_W, MC_W);
     for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) mcColumn(x, z);
   }
@@ -1177,6 +1311,14 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     else { skyU.zen.value.setRGB(0.42, 0.62, 0.86); skyU.hor.value.setRGB(0.98, 0.85, 0.70); }
     sun.color.setHex(mc ? 0xfff4e0 : 0xffdcb0);
     SUN_DIR.copy(SUN0); LIGHT_DIR.copy(SUN0); hemi.intensity = 0.75; sun.intensity = 1.45;
+    hemi.color.setHex(0xcfe0f5); hemi.groundColor.setHex(0x6d5a3e);
+    if (skyMesh) skyMesh.visible = true;
+    if (mc && dim === "nether") {
+      scene.background.setHex(0x2a0905); scene.fog.color.setHex(0x2a0905); scene.fog.near = 4; scene.fog.far = 55;
+      if (skyMesh) skyMesh.visible = false;
+      hemi.color.setHex(0xff9a6a); hemi.groundColor.setHex(0x5a1a0a); hemi.intensity = 0.9;
+      sun.color.setHex(0xff7a40); sun.intensity = 0.35;
+    }
   }
 
   // ---------- survival mode ----------
@@ -1200,7 +1342,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     });
   }
   const ITEMS = {};
-  for (let id = 1; id <= 16; id++) ITEMS[id] = { name: MCB[id].name, icon: tileSrc[TILES[MCB[id].t[1]]], block: id };
+  for (const id of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 23]) ITEMS[id] = { name: MCB[id].name, icon: tileSrc[TILES[MCB[id].t[1]]], block: id };
   Object.assign(ITEMS, {
     100: { name: "Палка", icon: icon16((x) => { x.fillStyle = "#8a6236"; for (let i = 0; i < 10; i++) x.fillRect(3 + i, 12 - i, 2, 2); }) },
     101: { name: "Яблоко", food: 4, icon: icon16((x) => { x.fillStyle = "#d0302a"; x.beginPath(); x.arc(8, 10, 5, 0, TAU); x.fill(); x.fillStyle = "#ff8a80"; x.fillRect(5, 8, 2, 2); x.fillStyle = "#5a3a1a"; x.fillRect(8, 2, 1, 4); x.fillStyle = "#4caf50"; x.fillRect(9, 3, 3, 2); }) },
@@ -1209,6 +1351,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     104: { name: "Железный слиток", icon: icon16((x) => { x.fillStyle = "#d8d8d4"; x.fillRect(3, 6, 10, 5); x.fillStyle = "#9a9a96"; x.fillRect(3, 10, 10, 1); x.fillRect(12, 6, 1, 5); x.fillStyle = "#fff"; x.fillRect(4, 7, 5, 1); }) },
     105: { name: "Алмаз", icon: icon16((x) => { x.fillStyle = "#5cdbd5"; x.fillRect(5, 3, 6, 2); x.fillRect(3, 5, 10, 2); x.fillRect(4, 7, 8, 2); x.fillRect(6, 9, 4, 2); x.fillRect(7, 11, 2, 2); x.fillStyle = "#d8fffd"; x.fillRect(6, 5, 2, 1); }) },
     106: { name: "Кость", icon: icon16((x) => { x.fillStyle = "#eeeae0"; for (let i = 0; i < 8; i++) x.fillRect(4 + i, 11 - i, 2, 2); x.fillRect(2, 11, 3, 3); x.fillRect(11, 2, 3, 3); }) },
+    108: { name: "Кварц", icon: icon16((x) => { x.fillStyle = "#f1ebe2"; x.fillRect(4, 5, 8, 6); x.fillRect(6, 3, 4, 10); x.fillStyle = "#c9bfb2"; x.fillRect(9, 6, 2, 4); }) },
+    [FLINT]: { name: "Огниво", icon: flintIcon },
     107: { name: "Нить", icon: icon16((x) => { x.fillStyle = "#f4f4f4"; for (let i = 0; i < 12; i++) x.fillRect(2 + i, 8 + Math.round(Math.sin(i * 0.9) * 3), 1, 1); }) },
   });
   const TIERS = [["Деревянная", "Деревянный", "#a87a48"], ["Каменная", "Каменный", "#8a8a86"], ["Железная", "Железный", "#e4e4e0"], ["Алмазная", "Алмазный", "#5cdbd5"]];
@@ -1232,6 +1376,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     { out: 4, n: 1, need: { 10: 1, 103: 1 }, smelt: true },
     { out: 6, n: 1, need: { 4: 1, 103: 2 } },
     { out: 8, n: 1, need: { 10: 4, 103: 2 } },
+    { out: FLINT, n: 1, need: { 104: 1, 103: 1 } },
   ];
   const itemMats = {};
   function itemMat(id) {
@@ -1259,8 +1404,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     return t && t.type === "sword" ? [2, 2.5, 3, 3.5][t.tier] : 1;
   }
   // seconds to break by hand; blocks in NEEDS_PICK drop nothing without a good enough pickaxe
-  const HARD = { 1: 1.5, 2: 2, 3: 0.6, 4: 0.3, 5: 3, 6: 0.3, 8: 0.05, 9: 0.5, 10: 0.5, 11: 2, 12: 0.2, 13: 2, 14: 3, 15: 3, 16: 3 };
-  const NEEDS_PICK = { 1: 0, 13: 0, 14: 0, 15: 1, 16: 2, 5: 2 };
+  const HARD = { 1: 1.5, 2: 2, 3: 0.6, 4: 0.3, 5: 3, 6: 0.3, 8: 0.05, 9: 0.5, 10: 0.5, 11: 2, 12: 0.2, 13: 2, 14: 3, 15: 3, 16: 3, 19: 10, 20: 0.4, 21: 0.5, 23: 3 };
+  const NEEDS_PICK = { 1: 0, 13: 0, 14: 0, 15: 1, 16: 2, 5: 2, 19: 3, 20: 0, 23: 0 };
   function pickTier() { const t = heldTool(); return t && t.type === "pick" ? t.tier : -1; }
   function breakTime(id) {
     const h = HARD[id] !== undefined ? HARD[id] : 1, tier = pickTier();
@@ -1273,6 +1418,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (id === 1) return 13;
     if (id === 14) return 103;
     if (id === 16) return 105;
+    if (id === 23) return 108;
     if (id === 4) return 0;
     if (id === 12) return Math.random() < 0.12 ? 101 : 0;
     return id;
@@ -1317,6 +1463,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       toast("Съедено: " + it.name.toLowerCase());
       return;
     }
+    if (id === FLINT) { ignite(aim()); return; }
     if (!it.block) return;
     const hit = aim(); if (!hit) return;
     const { px, py, pz } = hit;
@@ -1434,19 +1581,23 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function naturalSpawns(dt) {
     spawnT -= dt; if (spawnT > 0) return;
     spawnT = 2.5;
-    if (dayF > 0.35 || monsters.filter((m) => m.natural).length >= 10) return;
+    if ((dim === "over" && dayF > 0.35) || monsters.filter((m) => m.natural).length >= 10) return;
     for (let tries = 0; tries < 6; tries++) {
       const a = Math.random() * TAU, r = rnd(14, 26);
       const x = Math.floor(player.x + Math.cos(a) * r), z = Math.floor(player.z + Math.sin(a) * r);
       if (x < 1 || z < 1 || x >= MC_W - 1 || z >= MC_W - 1) continue;
-      let y = MC_H - 1; while (y > 0 && vox[vi(x, y, z)] === 0) y--;
+      let y = MC_H - 1;
+      if (dim === "nether") { y = 10; while (y < MC_H - 3 && !(vox[vi(x, y, z)] && !vox[vi(x, y + 1, z)] && !vox[vi(x, y + 2, z)])) y++; if (y >= MC_H - 3) continue; }
+      else while (y > 0 && vox[vi(x, y, z)] === 0) y--;
       const top = vox[vi(x, y, z)];
       if (top === WATER || top === MC_LAVA || top === LEAVES) continue;
-      if (spawnMonster([0, 0, 1, 2][(Math.random() * 4) | 0], x + 0.5, y + 1, z + 0.5, true)) { monsters[monsters.length - 1].natural = true; return; }
+      const pool = dim === "nether" ? [4, 4, 1, 0, 5] : [0, 0, 1, 2];
+      if (spawnMonster(pool[(Math.random() * pool.length) | 0], x + 0.5, y + 1, z + 0.5, true)) { monsters[monsters.length - 1].natural = true; return; }
     }
   }
   function survivalTick(dt, moved, run) {
-    updateDayNight(dt); naturalSpawns(dt);
+    if (dim === "over") updateDayNight(dt); else dayF = 0;
+    naturalSpawns(dt);
     food = Math.max(0, food - dt * (0.025 + (run && moved > 0 ? 0.09 : 0)));
     if (food >= 17 && player.hp < 10) { player.hp = Math.min(10, player.hp + dt * 0.3); food -= dt * 0.08; }
     if (food <= 0) { starveT -= dt; if (starveT <= 0) { starveT = 4; if (player.hp > 1) hurtPlayer(0.5, player.x + 0.01, player.z, 0); } }
@@ -1481,21 +1632,23 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function resetCommon(kind) {
     clearMonsters(); clearBlocks(); tnts = [];
     particles.forEach((p) => scene.remove(p.p)); particles = [];
-    disposeWorld(); worldKind = kind; applyAtmosphere(kind); underwater = 0;
+    disposeWorld(); worldKind = kind; dim = "over"; applyAtmosphere(kind); underwater = 0;
     distP = null; distPCell = -1; selBlock = 0; mode = "blocks";
     elapsed = 0; dist = 0; hints = 0; kills = 0; hintUntil = 0; hintPath = [];
     flying = false; $("tFly").classList.remove("main");
+    $("portalFx").style.opacity = "0";
     gameMode = "creative"; mine = null; crack.visible = false; touchMine = false;
   }
   function enterMC(gm) {
     resetCommon("mc");
     gameMode = gm === "survival" ? "survival" : "creative";
     if (gameMode === "survival") { inv = {}; hotbar = Array(9).fill(0); food = 20; dayT = 0.02; dayF = 1; spawnT = 4; starveT = 4; }
-    mcGenerate(); mcBuildAll();
-    Object.assign(player, { x: spawn.x, y: spawn.y, z: spawn.z, vy: 0, pitch: -0.15, yaw: Math.PI * 0.75, kx: 0, kz: 0, hp: 10 });
+    dim = "over"; dims = {}; portalT = 0; needExit = false;
+    mcGenerate(); mcBuildAll(); applyAtmosphere("mc");
+    Object.assign(player, { x: spawn.x, y: spawn.y, z: spawn.z, vy: 0, pitch: -0.05, yaw: Math.PI, kx: 0, kz: 0, hp: 10 });
     peakY = spawn.y;
     showHud();
-    toast(gameMode === "survival" ? "Выживание. Зажмите ЛКМ на стволе дерева, чтобы добыть его" : "Мир Minecraft. ЛКМ — ломать, ПКМ — ставить");
+    toast(gameMode === "survival" ? "Выживание. Зажмите ЛКМ на стволе дерева, чтобы добыть его" : "Мир Minecraft. Впереди портал в Nether");
   }
   function pauseGame() {
     if (state !== "play") return;
@@ -1770,6 +1923,14 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (standingOn(player) === LAVA + 1 && now - player.hurtT > 0.6) hurtPlayer(2, player.x + 0.01, player.z, 0);
     if (!survival() && now - player.hurtT > 4 && player.hp < 10) player.hp = Math.min(10, player.hp + dt * 0.6);
     if (survival()) survivalTick(dt, moved, run);
+    if (worldKind === "mc") {
+      const inPortal = [0.3, 1.2].some((h) => mcGet(Math.floor(player.x), Math.floor(player.y + h), Math.floor(player.z)) === PORTAL);
+      if (inPortal && !needExit) {
+        portalT += dt;
+        if (portalT >= (survival() ? 2.5 : 1)) { travel(); return; }
+      } else { portalT = 0; if (!inPortal) needExit = false; }
+      $("portalFx").style.opacity = String(Math.min(1, portalT / (survival() ? 2.5 : 1)));
+    }
     if (worldKind === "maze" && player.y < 1 && Math.hypot(player.x - cc(exitCell[0]), player.z - cc(exitCell[1])) < 1.3) winGame();
   }
 
@@ -1890,7 +2051,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       $("tTime").textContent = fmt(elapsed);
       $("hpBar").style.width = (player.hp * 10) + "%";
       if (worldKind === "mc") {
-        $("tSub").textContent = `X ${Math.floor(player.x)} · Y ${Math.floor(player.y)} · Z ${Math.floor(player.z)}` + (flying ? " · полёт" : "") + (survival() ? (dayF > 0.35 ? " · день" : " · ночь") : "");
+        $("tSub").textContent = (dim === "nether" ? "Nether · " : "") + `X ${Math.floor(player.x)} · Y ${Math.floor(player.y)} · Z ${Math.floor(player.z)}` + (flying ? " · полёт" : "") + (survival() && dim === "over" ? (dayF > 0.35 ? " · день" : " · ночь") : "");
         $("tMob").textContent = `Монстров: ${monsters.length}`;
       } else {
       const gx = Math.floor(player.x / S), gz = Math.floor(player.z / S);
