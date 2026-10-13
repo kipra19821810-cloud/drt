@@ -79,6 +79,21 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
 .mc-row .size { flex-direction: row; align-items: center; gap: 12px; }
 .mc-txt { display: flex; flex-direction: column; gap: 4px; }
 .mc-row canvas { width: 40px; height: 40px; image-rendering: pixelated; flex: none; }
+#survBars { width: 380px; max-width: 100%; height: 18px; image-rendering: pixelated; }
+.slot .cnt { left: auto; top: auto; right: 3px; bottom: 1px; font-size: 11px; }
+.inv-panel { width: min(760px, 100%); }
+.inv-panel h3 { font-family: var(--f-display); font-size: 26px; margin: 0; }
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 6px; }
+.inv-grid .slot { width: 100%; height: 54px; }
+.inv-empty { color: var(--dim); font-size: 13px; margin: 0; }
+.recipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+.recipe { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; min-width: 0; }
+.recipe canvas { width: 32px; height: 32px; image-rendering: pixelated; flex: none; }
+.recipe div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.recipe b { font-size: 13px; }
+.recipe span { font-size: 12px; color: var(--dim); }
+.recipe.can { border-color: rgba(242,165,65,0.6); }
+.btn:disabled { opacity: 0.4; cursor: default; }
 .controls { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 13px; color: var(--dim); }
 .controls dt { font-family: var(--f-mono); color: var(--stone); font-size: 12px; }
 .controls dd { margin: 0; }
@@ -128,11 +143,13 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   <div class="tools">
     <button class="btn" id="bMap" type="button">Карта<kbd>M</kbd></button>
     <button class="btn" id="bHint" type="button">Подсказка<kbd>H</kbd></button>
+    <button class="btn" id="bInv" type="button" hidden>Инвентарь<kbd>E</kbd></button>
     <button class="btn" id="bPause" type="button">Пауза<kbd>Esc</kbd></button>
   </div>
 </div>
 <div class="hud hotbar" id="hotbar" hidden>
   <div class="hb-head"><button class="btn" id="bMode" type="button">Блоки / Монстры<kbd>Q</kbd></button><b id="selName">Камень</b></div>
+  <canvas id="survBars" width="380" height="18" hidden></canvas>
   <div class="slots" id="slots"></div>
 </div>
 <div class="hud touch" id="touchBtns" hidden>
@@ -167,7 +184,10 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     </div>
     <div class="world mc">
     <div class="w-head"><b>Minecraft</b><span>холмы, леса, озёра, руды в глубине · 128 × 128 блоков</span></div>
-    <div class="mc-row"><button class="size" type="button" id="bMC"><canvas id="mcIcon" width="32" height="32"></canvas><div class="mc-txt"><b>Войти в мир</b><span>каждый раз новый</span></div></button></div>
+    <div class="mc-row">
+      <button class="size" type="button" id="bMC"><canvas id="mcIcon" width="32" height="32"></canvas><div class="mc-txt"><b>Творческий</b><span>все блоки, полёт, призыв монстров</span></div></button>
+      <button class="size" type="button" id="bMCS"><canvas id="mcIcon2" width="32" height="32"></canvas><div class="mc-txt"><b>Выживание</b><span>добывайте, крафтите, переживите ночь</span></div></button>
+    </div>
     </div>
     </div>
     <dl class="controls">
@@ -177,6 +197,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       <dt>ПКМ или F</dt><dd>ударить монстра или сломать поставленный блок</dd>
       <dt>Мир Minecraft</dt><dd>как в оригинале: ЛКМ — ломать и бить (можно зажать), ПКМ — ставить. Вода и лава растекаются, а где встречаются, застывают камнем. В воде Пробел — плыть вверх</dd>
       <dt>1–8 · колесо · Q</dt><dd>выбрать блок или монстра · переключить блоки и монстров</dd>
+      <dt>Выживание</dt><dd>зажмите ЛКМ, чтобы добыть блок · E — инвентарь и крафт · ПКМ с едой — съесть · ночью приходят монстры</dd>
       <dt>M · H · Esc</dt><dd>карта · подсказка (+20 с) · пауза</dd>
       <dt>Телефон</dt><dd>левая половина — джойстик, правая — обзор, кнопки справа</dd>
     </dl>
@@ -198,6 +219,18 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       <button class="btn" id="bRestart" type="button">Новый мир</button>
       <button class="btn" id="bMenu" type="button">Сменить мир</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="inv" hidden>
+  <div class="panel inv-panel">
+    <div class="eyebrow">Выживание</div>
+    <h2>Инвентарь</h2>
+    <p class="lead" id="invHint"></p>
+    <div class="inv-grid" id="invGrid"></div>
+    <h3>Крафт</h3>
+    <div class="recipes" id="recipes"></div>
+    <div class="row"><button class="btn primary" id="bInvClose" type="button">Закрыть<kbd>E</kbd></button></div>
   </div>
 </div>
 
@@ -271,7 +304,9 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     sky.onBeforeRender = () => sky.position.copy(camera.position);
     scene.add(sky);
   }
-  scene.add(new THREE.HemisphereLight(0xcfe0f5, 0x6d5a3e, 0.75));
+  const hemi = new THREE.HemisphereLight(0xcfe0f5, 0x6d5a3e, 0.75);
+  scene.add(hemi);
+  const SUN0 = SUN_DIR.clone(), LIGHT_DIR = SUN_DIR.clone();
   const sun = new THREE.DirectionalLight(0xffdcb0, 1.45);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -616,11 +651,11 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   // ---------- monsters ----------
   function spawnMonster(ti, x, y, z, quiet) {
     const type = MONSTERS[ti];
-    if (monsters.length >= MAX_MOBS) { toast("Слишком много монстров (максимум " + MAX_MOBS + ")"); return false; }
+    if (monsters.length >= MAX_MOBS) { if (!quiet) toast("Слишком много монстров (максимум " + MAX_MOBS + ")"); return false; }
     if (!type.fly) {
       let ok = false;
       for (let up = 0; up < 4; up++) if (!collides(x, y + up, z, type.r, type.h)) { y += up; ok = true; break; }
-      if (!ok) { toast("Здесь мало места для монстра"); return false; }
+      if (!ok) { if (!quiet) toast("Здесь мало места для монстра"); return false; }
     }
     const { g, mats, a } = makeMonsterMesh(type);
     const m = { type, x, y, z, vy: 0, r: type.r, h: type.h, onGround: false, hp: type.hp, yaw: Math.atan2(player.x - x, player.z - z), g, mats, a, kx: 0, kz: 0, cool: 1, flash: 0, phase: 0, wa: Math.random() * TAU, wt: 0, hopT: 0.5, hvx: 0, hvz: 0 };
@@ -631,7 +666,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function killMonster(i, silent) {
     const m = monsters[i];
     scene.remove(m.g); m.mats.forEach((mm) => mm.dispose());
-    if (!silent) { burst(m.x, m.y + m.h / 2, m.z, m.type.face[0], 18, 5); kills++; }
+    if (!silent) { burst(m.x, m.y + m.h / 2, m.z, m.type.face[0], 18, 5); kills++; if (survival() && m.hitByPlayer) loot(m.type.id); }
     monsters.splice(i, 1);
   }
   function hurtMonster(m, dmg, fx, fz, power) {
@@ -691,7 +726,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     shake = Math.max(shake, 0.25);
     if (player.hp <= 0) {
       Object.assign(player, { hp: 10, vy: 0, kx: 0, kz: 0, x: spawn.x, z: spawn.z, y: spawn.y });
-      toast("Вы погибли и вернулись на старт");
+      if (survival()) { food = 20; peakY = spawn.y; toast("Вы погибли. Вещи остались с вами"); }
+      else toast("Вы погибли и вернулись на старт");
     }
   }
   function reveal() {
@@ -721,6 +757,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function use() {
     if (state !== "play") return;
     swing = 0.25;
+    if (survival()) return survivalUse();
     const hit = aim();
     if (mode === "blocks") {
       if (!hit) { toast("Слишком далеко, подойдите ближе"); return; }
@@ -757,7 +794,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       const rad = Math.max(m.r, m.h / 2) * 0.85 + 0.15;
       if (cx * cx + cy * cy + cz * cz - t * t < rad * rad) { best = m; bt = t; }
     }
-    if (best) { hurtMonster(best, 2, player.x, player.z, 7); burst(best.x, best.y + best.h * 0.6, best.z, 0xffffff, 4, 2); return; }
+    if (best) { best.hitByPlayer = true; hurtMonster(best, swordDamage(), player.x, player.z, 7); burst(best.x, best.y + best.h * 0.6, best.z, 0xffffff, 4, 2); return; }
+    if (survival()) return;
     if (hit && hit.t <= 4.5) {
       if (hit.type > 0 && worldKind === "mc") {
         const k = vkey(hit.x, hit.y, hit.z); tnts = tnts.filter((q) => q.k !== k);
@@ -782,6 +820,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   const mobIcons = MONSTERS.map((m) => faceIcon(m.face, m.id));
   function renderHotbar() {
+    if (survival()) return renderHotbarSurv();
     const list = mode === "blocks" ? blockList() : MONSTERS, sel = mode === "blocks" ? selBlock : selMob;
     const wrap = $("slots"); wrap.innerHTML = "";
     list.forEach((it, i) => {
@@ -800,18 +839,28 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   function toggleFly() {
     if (state !== "play") return;
+    if (survival()) { toast("В выживании полёта нет"); return; }
     flying = !flying; player.vy = 0;
     $("tFly").classList.toggle("main", flying);
     toast(flying ? "Полёт: Пробел — вверх, C — вниз" : "Полёт выключен");
   }
-  function toggleMode() { mode = mode === "blocks" ? "mobs" : "blocks"; renderHotbar(); toast(mode === "blocks" ? "Режим: блоки" : "Режим: монстры"); }
+  function toggleMode() { if (survival()) { toast("В выживании монстры приходят сами, ночью"); return; } mode = mode === "blocks" ? "mobs" : "blocks"; renderHotbar(); toast(mode === "blocks" ? "Режим: блоки" : "Режим: монстры"); }
 
   // held block in the right hand
   const hand = new THREE.Mesh(unitBox, BLOCKS[0].mat);
   hand.scale.setScalar(0.17); hand.position.set(0.36, -0.3, -0.6); hand.rotation.set(0.3, 0.6, 0);
   camera.add(hand);
   let swing = 0;
-  function updateHand() { hand.visible = mode === "blocks" && state !== "menu"; hand.material = blockList()[selBlock].mat; }
+  function updateHand() {
+    handFlat.visible = false;
+    if (survival()) {
+      const id = hotbar[selBlock], it = id && ITEMS[id];
+      hand.visible = !!(it && it.block);
+      if (it) { const m = itemMat(id); if (it.block) hand.material = m; else { handFlat.visible = true; handFlat.material = m; } }
+      return;
+    }
+    hand.visible = mode === "blocks" && state !== "menu"; hand.material = blockList()[selBlock].mat;
+  }
   function blockList() { return worldKind === "mc" ? MC_LIST : BLOCKS; }
 
   // ---------- Minecraft world ----------
@@ -1115,6 +1164,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     for (let cz = 0; cz < MC_W / CH; cz++) for (let cx = 0; cx < MC_W / CH; cx++) buildChunk(cx, cz);
     clouds = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.85, depthWrite: false, fog: false, side: THREE.DoubleSide }));
     clouds.rotation.x = -Math.PI / 2; clouds.position.set(MC_W / 2, 72, MC_W / 2); world.add(clouds);
+    stars = null;
+    if (gameMode === "survival") { stars = makeStars(); world.add(stars); }
     mcTopX.clearRect(0, 0, MC_W, MC_W);
     for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) mcColumn(x, z);
   }
@@ -1125,7 +1176,285 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (mc) { skyU.zen.value.setRGB(0.45, 0.65, 1.0); skyU.hor.value.setRGB(0.78, 0.87, 1.0); }
     else { skyU.zen.value.setRGB(0.42, 0.62, 0.86); skyU.hor.value.setRGB(0.98, 0.85, 0.70); }
     sun.color.setHex(mc ? 0xfff4e0 : 0xffdcb0);
+    SUN_DIR.copy(SUN0); LIGHT_DIR.copy(SUN0); hemi.intensity = 0.75; sun.intensity = 1.45;
   }
+
+  // ---------- survival mode ----------
+  let gameMode = "creative", inv = {}, hotbar = Array(9).fill(0), food = 20, starveT = 4, peakY = 0;
+  let dayT = 0.02, dayF = 1, stars = null, spawnT = 4, mine = null, touchMine = false, barsKey = "";
+  const DAY_LEN = 360; // seconds for a full day and night
+  const survival = () => worldKind === "mc" && gameMode === "survival";
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  function icon16(draw) { return pix((x) => { x.scale(2, 2); draw(x); }); }
+  function toolIcon(kind, c) {
+    return icon16((x) => {
+      if (kind === "pick") {
+        x.fillStyle = "#6b4a26"; for (let i = 0; i < 9; i++) x.fillRect(3 + i, 12 - i, 2, 2);
+        x.fillStyle = c; x.fillRect(5, 1, 7, 2); x.fillRect(3, 2, 3, 2); x.fillRect(11, 2, 3, 2); x.fillRect(2, 4, 2, 3); x.fillRect(13, 4, 2, 3);
+      } else {
+        x.fillStyle = c; for (let i = 0; i < 9; i++) x.fillRect(6 + i, 9 - i, 2, 2);
+        x.fillStyle = "#3a2a1a"; x.fillRect(3, 8, 6, 2); x.fillRect(5, 6, 2, 6);
+        x.fillStyle = "#6b4a26"; x.fillRect(2, 12, 2, 2); x.fillRect(3, 11, 2, 2);
+      }
+    });
+  }
+  const ITEMS = {};
+  for (let id = 1; id <= 16; id++) ITEMS[id] = { name: MCB[id].name, icon: tileSrc[TILES[MCB[id].t[1]]], block: id };
+  Object.assign(ITEMS, {
+    100: { name: "Палка", icon: icon16((x) => { x.fillStyle = "#8a6236"; for (let i = 0; i < 10; i++) x.fillRect(3 + i, 12 - i, 2, 2); }) },
+    101: { name: "Яблоко", food: 4, icon: icon16((x) => { x.fillStyle = "#d0302a"; x.beginPath(); x.arc(8, 10, 5, 0, TAU); x.fill(); x.fillStyle = "#ff8a80"; x.fillRect(5, 8, 2, 2); x.fillStyle = "#5a3a1a"; x.fillRect(8, 2, 1, 4); x.fillStyle = "#4caf50"; x.fillRect(9, 3, 3, 2); }) },
+    102: { name: "Гнилая плоть", food: 3, icon: icon16((x) => { x.fillStyle = "#8a6a3a"; x.fillRect(3, 5, 10, 7); x.fillRect(5, 3, 6, 11); x.fillStyle = "#5d8f4a"; x.fillRect(5, 6, 2, 2); x.fillRect(9, 9, 2, 2); }) },
+    103: { name: "Уголь", icon: icon16((x) => { x.fillStyle = "#222"; x.fillRect(4, 4, 8, 8); x.fillRect(3, 6, 10, 5); x.fillStyle = "#555"; x.fillRect(6, 6, 2, 2); x.fillRect(9, 8, 2, 1); }) },
+    104: { name: "Железный слиток", icon: icon16((x) => { x.fillStyle = "#d8d8d4"; x.fillRect(3, 6, 10, 5); x.fillStyle = "#9a9a96"; x.fillRect(3, 10, 10, 1); x.fillRect(12, 6, 1, 5); x.fillStyle = "#fff"; x.fillRect(4, 7, 5, 1); }) },
+    105: { name: "Алмаз", icon: icon16((x) => { x.fillStyle = "#5cdbd5"; x.fillRect(5, 3, 6, 2); x.fillRect(3, 5, 10, 2); x.fillRect(4, 7, 8, 2); x.fillRect(6, 9, 4, 2); x.fillRect(7, 11, 2, 2); x.fillStyle = "#d8fffd"; x.fillRect(6, 5, 2, 1); }) },
+    106: { name: "Кость", icon: icon16((x) => { x.fillStyle = "#eeeae0"; for (let i = 0; i < 8; i++) x.fillRect(4 + i, 11 - i, 2, 2); x.fillRect(2, 11, 3, 3); x.fillRect(11, 2, 3, 3); }) },
+    107: { name: "Нить", icon: icon16((x) => { x.fillStyle = "#f4f4f4"; for (let i = 0; i < 12; i++) x.fillRect(2 + i, 8 + Math.round(Math.sin(i * 0.9) * 3), 1, 1); }) },
+  });
+  const TIERS = [["Деревянная", "Деревянный", "#a87a48"], ["Каменная", "Каменный", "#8a8a86"], ["Железная", "Железный", "#e4e4e0"], ["Алмазная", "Алмазный", "#5cdbd5"]];
+  TIERS.forEach(([f, m, c], t) => {
+    ITEMS[110 + t] = { name: f + " кирка", icon: toolIcon("pick", c), tool: { type: "pick", tier: t } };
+    ITEMS[120 + t] = { name: m + " меч", icon: toolIcon("sword", c), tool: { type: "sword", tier: t } };
+  });
+  const RECIPES = [
+    { out: 2, n: 4, need: { 11: 1 } },
+    { out: 100, n: 4, need: { 2: 2 } },
+    { out: 110, n: 1, need: { 2: 3, 100: 2 } },
+    { out: 120, n: 1, need: { 2: 2, 100: 1 } },
+    { out: 111, n: 1, need: { 13: 3, 100: 2 } },
+    { out: 121, n: 1, need: { 13: 2, 100: 1 } },
+    { out: 104, n: 1, need: { 15: 1, 103: 1 }, smelt: true },
+    { out: 112, n: 1, need: { 104: 3, 100: 2 } },
+    { out: 122, n: 1, need: { 104: 2, 100: 1 } },
+    { out: 113, n: 1, need: { 105: 3, 100: 2 } },
+    { out: 123, n: 1, need: { 105: 2, 100: 1 } },
+    { out: 1, n: 1, need: { 13: 1, 103: 1 }, smelt: true },
+    { out: 4, n: 1, need: { 10: 1, 103: 1 }, smelt: true },
+    { out: 6, n: 1, need: { 4: 1, 103: 2 } },
+    { out: 8, n: 1, need: { 10: 4, 103: 2 } },
+  ];
+  const itemMats = {};
+  function itemMat(id) {
+    if (!itemMats[id]) itemMats[id] = new THREE.MeshLambertMaterial({ map: tex(ITEMS[id].icon), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide });
+    return itemMats[id];
+  }
+  const handFlat = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial());
+  handFlat.scale.setScalar(0.3); handFlat.position.set(0.34, -0.26, -0.55); handFlat.rotation.set(0, -0.4, 0); handFlat.visible = false;
+  camera.add(handFlat);
+
+  function give(id, n) {
+    inv[id] = (inv[id] || 0) + n;
+    if (!hotbar.includes(id)) { const e = hotbar.indexOf(0); if (e >= 0) hotbar[e] = id; }
+    renderHotbar();
+  }
+  function take(id, n = 1) {
+    inv[id] = (inv[id] || 0) - n;
+    if (inv[id] <= 0) { delete inv[id]; const s = hotbar.indexOf(id); if (s >= 0) hotbar[s] = 0; }
+    renderHotbar();
+  }
+  const heldTool = () => { const it = ITEMS[hotbar[selBlock]]; return it && it.tool; };
+  function swordDamage() {
+    if (!survival()) return 2;
+    const t = heldTool();
+    return t && t.type === "sword" ? [2, 2.5, 3, 3.5][t.tier] : 1;
+  }
+  // seconds to break by hand; blocks in NEEDS_PICK drop nothing without a good enough pickaxe
+  const HARD = { 1: 1.5, 2: 2, 3: 0.6, 4: 0.3, 5: 3, 6: 0.3, 8: 0.05, 9: 0.5, 10: 0.5, 11: 2, 12: 0.2, 13: 2, 14: 3, 15: 3, 16: 3 };
+  const NEEDS_PICK = { 1: 0, 13: 0, 14: 0, 15: 1, 16: 2, 5: 2 };
+  function pickTier() { const t = heldTool(); return t && t.type === "pick" ? t.tier : -1; }
+  function breakTime(id) {
+    const h = HARD[id] !== undefined ? HARD[id] : 1, tier = pickTier();
+    if (id in NEEDS_PICK) return tier >= 0 ? (h * 1.5) / [2, 4, 6, 8][tier] : h * 5;
+    return h * 1.5;
+  }
+  function dropFor(id) {
+    if (id in NEEDS_PICK && pickTier() < NEEDS_PICK[id]) return 0;
+    if (id === 3) return 9;
+    if (id === 1) return 13;
+    if (id === 14) return 103;
+    if (id === 16) return 105;
+    if (id === 4) return 0;
+    if (id === 12) return Math.random() < 0.12 ? 101 : 0;
+    return id;
+  }
+  function loot(kind) {
+    const r = (a, b) => a + ((Math.random() * (b - a + 1)) | 0);
+    const L = { zombie: [102, r(0, 2)], skeleton: [106, r(1, 2)], spider: [107, r(0, 2)], golem: [104, r(3, 5)] }[kind];
+    if (L && L[1] > 0) { give(L[0], L[1]); toast(`+${L[1]} ${ITEMS[L[0]].name}`); }
+  }
+
+  const crackTex = (() => {
+    const c = pix((x, n) => { x.strokeStyle = "#fff"; x.lineWidth = 1.2; for (let k = 0; k < 7; k++) { let a = n / 2, b = n / 2; x.beginPath(); x.moveTo(a, b); for (let i = 0; i < 5; i++) { a += rnd(-6, 6); b += rnd(-6, 6); x.lineTo(a, b); } x.stroke(); } });
+    const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; return t;
+  })();
+  const crack = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), new THREE.MeshBasicMaterial({ color: 0x000000, map: crackTex, transparent: true, opacity: 0, depthWrite: false }));
+  crack.visible = false; scene.add(crack);
+  function mineStep(dt) {
+    const hit = aim();
+    if (!hit || hit.type <= 0 || hit.t > 4.5) { mine = null; crack.visible = false; return; }
+    if (!mine || mine.x !== hit.x || mine.y !== hit.y || mine.z !== hit.z) mine = { x: hit.x, y: hit.y, z: hit.z, p: 0 };
+    const id = hit.type;
+    mine.p += dt / breakTime(id);
+    if (swing <= 0) swing = 0.25;
+    crack.visible = true; crack.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5); crack.material.opacity = Math.min(0.9, 0.15 + mine.p * 0.8);
+    if (mine.p >= 1) {
+      const drop = dropFor(id), k = vkey(hit.x, hit.y, hit.z);
+      tnts = tnts.filter((q) => q.k !== k);
+      burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, MCB[id].color, 8, 3);
+      mcSet(hit.x, hit.y, hit.z, 0);
+      if (drop) give(drop, 1);
+      else if (id in NEEDS_PICK) toast(NEEDS_PICK[id] > 0 ? "Нужна кирка получше" : "Без кирки камень ничего не даёт");
+      mine = null; crack.visible = false;
+    }
+  }
+  function survivalUse() {
+    const id = hotbar[selBlock], it = id && ITEMS[id];
+    if (!it) return;
+    if (it.food) {
+      if (food >= 20) { toast("Вы не голодны"); return; }
+      food = Math.min(20, food + it.food); take(id);
+      burst(player.x - Math.sin(player.yaw) * 0.6, player.y + 1.3, player.z - Math.cos(player.yaw) * 0.6, 0xc0392b, 6, 1.5);
+      toast("Съедено: " + it.name.toLowerCase());
+      return;
+    }
+    if (!it.block) return;
+    const hit = aim(); if (!hit) return;
+    const { px, py, pz } = hit;
+    if (py > MC_H - 1 || solidType(px, py, pz) !== 0) return;
+    const overlaps = (e) => px + 1 > e.x - e.r && px < e.x + e.r && pz + 1 > e.z - e.r && pz < e.z + e.r && py + 1 > e.y && py < e.y + e.h;
+    if (overlaps(player) || monsters.some((m) => !m.type.fly && overlaps(m))) return;
+    mcSet(px, py, pz, it.block); take(id);
+    if (it.block === MC_TNT) { tnts.push({ k: vkey(px, py, pz), x: px, y: py, z: pz, t: 3 }); toast("Динамит взорвётся через 3 секунды"); }
+  }
+
+  function renderHotbarSurv() {
+    const wrap = $("slots"); wrap.innerHTML = "";
+    hotbar.forEach((id, i) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "slot" + (i === selBlock ? " on" : "");
+      const name = id ? ITEMS[id].name : "Пусто"; b.title = name; b.setAttribute("aria-label", name);
+      const c = document.createElement("canvas"); c.width = c.height = 32;
+      if (id) c.getContext("2d").drawImage(ITEMS[id].icon, 0, 0, 32, 32);
+      const s = document.createElement("span"); s.textContent = i + 1;
+      b.append(c, s);
+      if (id && inv[id] > 1) { const n = document.createElement("span"); n.className = "cnt"; n.textContent = inv[id]; b.append(n); }
+      b.addEventListener("click", () => select(i)); wrap.append(b);
+    });
+    const id = hotbar[selBlock];
+    $("selName").textContent = id ? ITEMS[id].name + (inv[id] > 1 ? " × " + inv[id] : "") : "Пустая рука";
+    $("tUse").textContent = id && ITEMS[id].food ? "Съесть" : "Поставить";
+    updateHand();
+  }
+  function toggleInv() {
+    if (state === "play" && survival()) { state = "inv"; keys.clear(); holdBtn = -1; unlockPointer(); renderInv(); $("inv").hidden = false; }
+    else if (state === "inv") { $("inv").hidden = true; state = "play"; lockPointer(); }
+  }
+  function slotIcon(id, count, onClick) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "slot"; b.title = ITEMS[id].name; b.setAttribute("aria-label", ITEMS[id].name);
+    const c = document.createElement("canvas"); c.width = c.height = 32; c.getContext("2d").drawImage(ITEMS[id].icon, 0, 0, 32, 32);
+    b.append(c);
+    if (count > 1) { const n = document.createElement("span"); n.className = "cnt"; n.textContent = count; b.append(n); }
+    if (onClick) b.addEventListener("click", onClick);
+    return b;
+  }
+  function renderInv() {
+    $("invHint").textContent = `Нажмите на предмет, чтобы положить его в выбранную ячейку панели (сейчас ячейка ${selBlock + 1}). Переплавка требует уголь.`;
+    const grid = $("invGrid"); grid.innerHTML = "";
+    const ids = Object.keys(inv).map(Number).sort((a, b) => a - b);
+    if (!ids.length) { const p = document.createElement("p"); p.className = "inv-empty"; p.textContent = "Пока пусто. Добудьте дерево: зажмите ЛКМ на стволе."; grid.append(p); }
+    ids.forEach((id) => grid.append(slotIcon(id, inv[id], () => {
+      const other = hotbar.indexOf(id);
+      if (other >= 0) hotbar[other] = hotbar[selBlock];
+      hotbar[selBlock] = id; renderHotbar(); renderInv();
+    })));
+    const list = $("recipes"); list.innerHTML = "";
+    RECIPES.forEach((r) => {
+      const can = Object.entries(r.need).every(([id, n]) => (inv[id] || 0) >= n);
+      const row = document.createElement("div"); row.className = "recipe" + (can ? " can" : "");
+      const c = document.createElement("canvas"); c.width = c.height = 32; c.getContext("2d").drawImage(ITEMS[r.out].icon, 0, 0, 32, 32);
+      const t = document.createElement("div");
+      const b = document.createElement("b"); b.textContent = ITEMS[r.out].name + (r.n > 1 ? " × " + r.n : "");
+      const sp = document.createElement("span"); sp.textContent = (r.smelt ? "переплавка: " : "") + Object.entries(r.need).map(([id, n]) => `${ITEMS[id].name.toLowerCase()} ${n} (есть ${inv[id] || 0})`).join(", ");
+      t.append(b, sp);
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = "btn"; btn.textContent = "Создать"; btn.disabled = !can;
+      btn.addEventListener("click", () => { Object.entries(r.need).forEach(([id, n]) => take(+id, n)); give(r.out, r.n); renderInv(); });
+      row.append(c, t, btn); list.append(row);
+    });
+  }
+
+  // hearts and hunger above the hotbar
+  const HEART = ["01100110", "11111111", "11111111", "11111111", "01111110", "00111100", "00011000"];
+  const MEAT = ["00011110", "00111111", "00111111", "00011110", "00110000", "01100000", "11000000"];
+  function pixIcon(x, ox, pat, v, full, empty, bone) {
+    pat.forEach((row, cy) => [...row].forEach((ch, cx) => {
+      if (ch !== "1") return;
+      x.fillStyle = bone && cy >= 4 ? (cx < 8 * v ? "#eeeeee" : empty) : cx < 8 * v ? full : empty;
+      x.fillRect(ox + cx * 2, 2 + cy * 2, 2, 2);
+    }));
+  }
+  function drawBars() {
+    const key = Math.round(player.hp * 2) + "|" + Math.round(food);
+    if (key === barsKey) return; barsKey = key;
+    const c = $("survBars"), x = c.getContext("2d"); x.clearRect(0, 0, c.width, c.height);
+    for (let i = 0; i < 10; i++) {
+      pixIcon(x, i * 18, HEART, Math.max(0, Math.min(1, player.hp - i)), "#e0302a", "#3b1414", false);
+      pixIcon(x, c.width - 16 - i * 18, MEAT, Math.max(0, Math.min(1, (food - i * 2) / 2)), "#b8682e", "#3a2a18", true);
+    }
+  }
+
+  function makeStars() {
+    const n = 700, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const th = Math.random() * TAU, ph = Math.random() * Math.PI * 0.5;
+      pos[i * 3] = Math.cos(th) * Math.sin(ph) * 300; pos[i * 3 + 1] = Math.cos(ph) * 300; pos[i * 3 + 2] = Math.sin(th) * Math.sin(ph) * 300;
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const st = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xdfe6ff, size: 1.5, sizeAttenuation: false, fog: false, transparent: true, opacity: 0, depthWrite: false }));
+    st.onBeforeRender = () => st.position.copy(camera.position);
+    return st;
+  }
+  function updateDayNight(dt) {
+    dayT = (dayT + dt / DAY_LEN) % 1;
+    const a = dayT * TAU, sy = Math.sin(a);
+    SUN_DIR.set(Math.cos(a), sy, 0.3).normalize();
+    dayF = Math.min(1, Math.max(0, (sy + 0.12) / 0.4));
+    const dusk = sy > -0.2 ? Math.max(0, 1 - Math.abs(sy) / 0.3) * 0.6 : 0;
+    skyU.zen.value.setRGB(lerp(0.02, 0.45, dayF), lerp(0.03, 0.65, dayF), lerp(0.09, 1.0, dayF));
+    skyU.hor.value.setRGB(lerp(lerp(0.04, 0.78, dayF), 1.0, dusk), lerp(lerp(0.05, 0.87, dayF), 0.58, dusk), lerp(lerp(0.12, 1.0, dayF), 0.35, dusk));
+    if (!underwater) { scene.background.copy(skyU.hor.value); scene.fog.color.copy(skyU.hor.value); }
+    if (sy > -0.05) { LIGHT_DIR.copy(SUN_DIR); sun.color.setHex(0xfff0d8); sun.intensity = 1.4 * dayF; }
+    else { LIGHT_DIR.set(-SUN_DIR.x, -SUN_DIR.y, SUN_DIR.z).normalize(); sun.color.setHex(0x9fb4ff); sun.intensity = 0.28; }
+    hemi.intensity = 0.15 + 0.6 * dayF;
+    if (stars) stars.material.opacity = 1 - dayF;
+  }
+  function skyOpen(m) {
+    const x = Math.floor(m.x), z = Math.floor(m.z);
+    for (let y = Math.floor(m.y + m.h); y < MC_H; y++) { const v = mcGet(x, y, z); if (v && v !== WATER) return false; }
+    return true;
+  }
+  function naturalSpawns(dt) {
+    spawnT -= dt; if (spawnT > 0) return;
+    spawnT = 2.5;
+    if (dayF > 0.35 || monsters.filter((m) => m.natural).length >= 10) return;
+    for (let tries = 0; tries < 6; tries++) {
+      const a = Math.random() * TAU, r = rnd(14, 26);
+      const x = Math.floor(player.x + Math.cos(a) * r), z = Math.floor(player.z + Math.sin(a) * r);
+      if (x < 1 || z < 1 || x >= MC_W - 1 || z >= MC_W - 1) continue;
+      let y = MC_H - 1; while (y > 0 && vox[vi(x, y, z)] === 0) y--;
+      const top = vox[vi(x, y, z)];
+      if (top === WATER || top === MC_LAVA || top === LEAVES) continue;
+      if (spawnMonster([0, 0, 1, 2][(Math.random() * 4) | 0], x + 0.5, y + 1, z + 0.5, true)) { monsters[monsters.length - 1].natural = true; return; }
+    }
+  }
+  function survivalTick(dt, moved, run) {
+    updateDayNight(dt); naturalSpawns(dt);
+    food = Math.max(0, food - dt * (0.025 + (run && moved > 0 ? 0.09 : 0)));
+    if (food >= 17 && player.hp < 10) { player.hp = Math.min(10, player.hp + dt * 0.3); food -= dt * 0.08; }
+    if (food <= 0) { starveT -= dt; if (starveT <= 0) { starveT = 4; if (player.hp > 1) hurtPlayer(0.5, player.x + 0.01, player.z, 0); } }
+    drawBars();
+  }
+  $("tHit").addEventListener("pointerdown", () => (touchMine = true));
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) $("tHit").addEventListener(ev, () => (touchMine = false));
+  { const g = $("mcIcon2").getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(toolIcon("pick", "#5cdbd5"), 0, 0); }
 
   // ---------- game flow ----------
   function newGame(n) {
@@ -1145,6 +1474,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     ["hud", "side", "hotbar", "cross"].forEach((i) => ($(i).hidden = false));
     $("touchBtns").hidden = !touchUI;
     $("bHint").hidden = $("bClearBlocks").hidden = worldKind === "mc";
+    $("survBars").hidden = $("bInv").hidden = !survival(); $("bMode").hidden = survival(); barsKey = "";
     state = "play"; renderHotbar();
     lockPointer();
   }
@@ -1155,18 +1485,22 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     distP = null; distPCell = -1; selBlock = 0; mode = "blocks";
     elapsed = 0; dist = 0; hints = 0; kills = 0; hintUntil = 0; hintPath = [];
     flying = false; $("tFly").classList.remove("main");
+    gameMode = "creative"; mine = null; crack.visible = false; touchMine = false;
   }
-  function enterMC() {
+  function enterMC(gm) {
     resetCommon("mc");
+    gameMode = gm === "survival" ? "survival" : "creative";
+    if (gameMode === "survival") { inv = {}; hotbar = Array(9).fill(0); food = 20; dayT = 0.02; dayF = 1; spawnT = 4; starveT = 4; }
     mcGenerate(); mcBuildAll();
     Object.assign(player, { x: spawn.x, y: spawn.y, z: spawn.z, vy: 0, pitch: -0.15, yaw: Math.PI * 0.75, kx: 0, kz: 0, hp: 10 });
+    peakY = spawn.y;
     showHud();
-    toast("Мир Minecraft. ЛКМ — ломать, ПКМ — ставить");
+    toast(gameMode === "survival" ? "Выживание. Зажмите ЛКМ на стволе дерева, чтобы добыть его" : "Мир Minecraft. ЛКМ — ломать, ПКМ — ставить");
   }
   function pauseGame() {
     if (state !== "play") return;
     state = "pause"; keys.clear();
-    $("pauseInfo").textContent = worldKind === "mc" ? `Мир Minecraft · время ${fmt(elapsed)} · монстров ${monsters.length}` : `Время ${fmt(elapsed)} · пройдено ${Math.round(dist)} м · монстров ${monsters.length} · блоков ${blocks.size}`;
+    $("pauseInfo").textContent = worldKind === "mc" ? `Мир Minecraft (${gameMode === "survival" ? "выживание" : "творческий"}) · время ${fmt(elapsed)} · монстров ${monsters.length}` : `Время ${fmt(elapsed)} · пройдено ${Math.round(dist)} м · монстров ${monsters.length} · блоков ${blocks.size}`;
     $("pause").hidden = false;
   }
   function resume() { $("pause").hidden = true; state = "play"; lockPointer(); }
@@ -1230,7 +1564,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (state !== "play" || touchUI) return;
     if (document.pointerLockElement === canvas) { if (e.button === 0 || e.button === 2) { holdBtn = e.button; holdT = 0.3; clickAct(e.button); } return; }
     if (usePointerLock) { lockPointer(); return; }
-    dragging = true; dragMoved = 0; dragBtn = e.button; lastX = e.clientX; lastY = e.clientY;
+    dragging = true; dragMoved = 0; dragBtn = e.button; lastX = e.clientX; lastY = e.clientY; holdBtn = e.button;
   });
   document.addEventListener("mouseup", () => {
     holdBtn = -1;
@@ -1245,16 +1579,17 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   addEventListener("wheel", (e) => {
     if (state !== "play") return;
-    const n = mode === "blocks" ? blockList().length : MONSTERS.length, cur = mode === "blocks" ? selBlock : selMob;
+    const n = survival() ? 9 : mode === "blocks" ? blockList().length : MONSTERS.length, cur = mode === "blocks" ? selBlock : selMob;
     select((cur + (e.deltaY > 0 ? 1 : -1) + n) % n);
   }, { passive: true });
   addEventListener("keydown", (e) => {
     const k = e.code;
+    if (state === "inv" && (k === "KeyE" || k === "Escape")) { toggleInv(); return; }
     if (k === "KeyM") { if (state === "play") toggleMap(); return; }
     if (state === "play") {
       if (k === "KeyH") return hint();
       if (k === "KeyQ" || k === "Tab") { e.preventDefault(); return toggleMode(); }
-      if (k === "KeyE") return use();
+      if (k === "KeyE") return survival() ? toggleInv() : use();
       if (k === "KeyF") return attack();
       if (/^Digit[1-9]$/.test(k)) return select(+k.slice(5) - 1);
       if (k === "Space") {
@@ -1316,8 +1651,11 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   $("bAggro").addEventListener("click", () => { aggressive = !aggressive; $("bAggro").textContent = "Монстры нападают: " + (aggressive ? "да" : "нет"); });
   $("bClearMobs").addEventListener("click", () => { clearMonsters(); $("pauseInfo").textContent = "Все монстры убраны."; });
   $("bClearBlocks").addEventListener("click", () => { clearBlocks(); $("pauseInfo").textContent = "Все поставленные блоки убраны."; });
-  $("bRestart").addEventListener("click", () => (worldKind === "mc" ? enterMC() : newGame(N)));
-  $("bMC").addEventListener("click", enterMC);
+  $("bRestart").addEventListener("click", () => (worldKind === "mc" ? enterMC(gameMode) : newGame(N)));
+  $("bMC").addEventListener("click", () => enterMC("creative"));
+  $("bMCS").addEventListener("click", () => enterMC("survival"));
+  $("bInv").addEventListener("click", () => { unlockPointer(); toggleInv(); });
+  $("bInvClose").addEventListener("click", toggleInv);
   $("bMenu").addEventListener("click", toMenu);
   $("bAgain").addEventListener("click", () => newGame(N));
   $("bMenu2").addEventListener("click", toMenu);
@@ -1413,8 +1751,16 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       if (player.onGround) airJumps = 1;
       if (inWater) { player.vy = Math.max(player.vy, -2.5); if (up) player.vy = Math.min(player.vy + GRAV * dt * 1.6, 3.6); airJumps = 1; }
       if ((jumpQ || up) && player.onGround) player.vy = JUMP;
-      else if (jumpQ && airJumps > 0) { player.vy = JUMP * 0.9; airJumps--; }
+      else if (jumpQ && airJumps > 0 && !survival()) { player.vy = JUMP * 0.9; airJumps--; }
       physics(player, dx, dz, dt);
+      if (survival()) {
+        if (!player.onGround && !inWater) peakY = Math.max(peakY, player.y);
+        else {
+          const fall = peakY - player.y;
+          if (player.onGround && !inWater && fall > 3.5) hurtPlayer((fall - 3) * 0.5, player.x + 0.01, player.z, 0);
+          peakY = player.y;
+        }
+      }
     }
     jumpQ = false;
     if (player.y < -5) Object.assign(player, { x: spawn.x, z: spawn.z, y: spawn.y, vy: 0 });
@@ -1422,7 +1768,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     dist += moved; if (player.onGround) bob += moved * 2.4;
     if (moved > 0 || !player.onGround) reveal();
     if (standingOn(player) === LAVA + 1 && now - player.hurtT > 0.6) hurtPlayer(2, player.x + 0.01, player.z, 0);
-    if (now - player.hurtT > 4 && player.hp < 10) player.hp = Math.min(10, player.hp + dt * 0.6);
+    if (!survival() && now - player.hurtT > 4 && player.hp < 10) player.hp = Math.min(10, player.hp + dt * 0.6);
+    if (survival()) survivalTick(dt, moved, run);
     if (worldKind === "maze" && player.y < 1 && Math.hypot(player.x - cc(exitCell[0]), player.z - cc(exitCell[1])) < 1.3) winGame();
   }
 
@@ -1475,6 +1822,10 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
         physics(m, mvx * dt, mvz * dt, dt);
         if (m.hitWall) { if (ty.climb) m.vy = Math.max(m.vy, 4); else if (m.onGround && !ty.hop) m.vy = JUMP * 0.95; }
         if (standingOn(m) === LAVA + 1 || (worldKind === "mc" && mcGet(Math.floor(m.x), Math.floor(m.y + 0.2), Math.floor(m.z)) === MC_LAVA)) { m.hp -= dt * 3; m.flash = 0.1; }
+        if (m.natural && dayF > 0.6 && (ty.id === "zombie" || ty.id === "skeleton") && skyOpen(m)) {
+          m.hp -= dt * 1.2; m.flash = 0.05;
+          if (Math.random() < dt * 8) burst(m.x, m.y + m.h * 0.7, m.z, 0xff8a2a, 1, 1);
+        }
       }
       for (let j = 0; j < i; j++) {
         const o = monsters[j], sx = m.x - o.x, sz = m.z - o.z, dd = Math.hypot(sx, sz), min = m.r + o.r;
@@ -1493,6 +1844,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       const fl = m.flash > 0;
       m.mats.forEach((mm) => mm.emissive.setHex(fl ? 0xaa1a10 : mm.userData.base));
       if (aggressive && m.cool <= 0 && d < m.r + PR + 0.45 && m.y < player.y + PH && m.y + m.h > player.y) { hurtPlayer(ty.dmg, m.x, m.z, ty.id === "golem" ? 12 : 6); m.cool = 1; }
+      if (m.natural && d > 48) { killMonster(i, true); continue; }
       if (m.hp <= 0 || m.y < -10) killMonster(i);
     }
   }
@@ -1538,7 +1890,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       $("tTime").textContent = fmt(elapsed);
       $("hpBar").style.width = (player.hp * 10) + "%";
       if (worldKind === "mc") {
-        $("tSub").textContent = `X ${Math.floor(player.x)} · Y ${Math.floor(player.y)} · Z ${Math.floor(player.z)}` + (flying ? " · полёт" : "");
+        $("tSub").textContent = `X ${Math.floor(player.x)} · Y ${Math.floor(player.y)} · Z ${Math.floor(player.z)}` + (flying ? " · полёт" : "") + (survival() ? (dayF > 0.35 ? " · день" : " · ночь") : "");
         $("tMob").textContent = `Монстров: ${monsters.length}`;
       } else {
       const gx = Math.floor(player.x / S), gz = Math.floor(player.z / S);
@@ -1547,6 +1899,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       $("tMob").textContent = `Монстров: ${monsters.length} · блоков: ${blocks.size}`;
       }
       if (worldKind === "mc") fluidStep(dt);
+      if (survival()) { if (holdBtn === 0 || touchMine) mineStep(dt); else if (mine) { mine = null; crack.visible = false; } }
       if (holdBtn >= 0 && worldKind === "mc" && document.pointerLockElement === canvas) { holdT -= dt; if (holdT <= 0) { holdT = 0.22; clickAct(holdBtn); } }
     } else if (state === "menu") {
       player.yaw += dt * 0.06;
@@ -1558,7 +1911,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       const sh = shake * shake * 0.4;
       camera.position.set(player.x + rnd(-sh, sh), player.y + EYE + Math.sin(bob) * 0.04 + rnd(-sh, sh), player.z + rnd(-sh, sh));
       camera.rotation.set(player.pitch, player.yaw, 0);
-      sun.position.set(player.x + SUN_DIR.x * 70, SUN_DIR.y * 70, player.z + SUN_DIR.z * 70);
+      sun.position.set(player.x + LIGHT_DIR.x * 70, LIGHT_DIR.y * 70, player.z + LIGHT_DIR.z * 70);
       sun.position.y += player.y;
       sun.target.position.set(player.x, player.y, player.z); sun.target.updateMatrixWorld();
       if (exitGroup) {
@@ -1577,6 +1930,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       }
       swing = Math.max(0, swing - dt);
       hand.rotation.x = 0.3 - Math.sin((swing / 0.25) * Math.PI) * 0.9;
+      handFlat.rotation.x = -Math.sin((swing / 0.25) * Math.PI) * 0.9;
       hand.position.y = -0.3 + Math.sin(bob) * 0.015;
       if (state === "play") {
         const hit = aim();
