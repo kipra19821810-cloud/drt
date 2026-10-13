@@ -54,6 +54,11 @@ body { background: var(--night); color: var(--ink); font-family: var(--f-body); 
 .crosshair::before, .crosshair::after { content: ""; position: absolute; background: var(--ink); box-shadow: 0 0 2px #000; }
 .crosshair::before { left: 7px; top: 0; width: 2px; height: 16px; }
 .crosshair::after { top: 7px; left: 0; height: 2px; width: 16px; }
+.boss { position: fixed; z-index: 2; top: calc(env(safe-area-inset-top, 0px) + 14px); left: 50%; transform: translateX(-50%); width: min(420px, calc(100% - 420px)); min-width: 160px; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.boss span { font-family: var(--f-display); font-size: 20px; color: var(--ink); text-shadow: 0 1px 4px #000; }
+.boss-bar { width: 100%; height: 10px; background: rgba(0,0,0,0.6); border: 1px solid rgba(200,120,255,0.6); }
+.boss-bar i { display: block; height: 100%; width: 100%; background: #c86bff; }
+@media (max-width: 560px) { .boss { top: calc(env(safe-area-inset-top, 0px) + 140px); width: calc(100% - 32px); } }
 #portalFx { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at center, rgba(150,60,230,0.35), rgba(90,20,170,0.9)); opacity: 0; }
 #hurt { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at center, transparent 45%, rgba(216,70,58,0.55)); opacity: 0; transition: opacity 0.35s; }
 
@@ -163,6 +168,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   <button type="button" id="tDown">Вниз</button>
 </div>
 <div class="toast" id="toast"></div>
+<div class="boss" id="boss" hidden><span>Эндер-дракон</span><div class="boss-bar"><i id="bossBar"></i></div></div>
 <div id="stick" hidden><i id="knob"></i></div>
 
 <div id="bigmap" hidden>
@@ -185,7 +191,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     </div>
     </div>
     <div class="world mc">
-    <div class="w-head"><b>Minecraft</b><span>холмы, леса, озёра, руды · рядом со стартом стоит портал в Nether</span></div>
+    <div class="w-head"><b>Minecraft</b><span>холмы, леса, озёра · у старта порталы в Nether и в Энд, где живёт дракон</span></div>
     <div class="mc-row">
       <button class="size" type="button" id="bMC"><canvas id="mcIcon" width="32" height="32"></canvas><div class="mc-txt"><b>Творческий</b><span>все блоки, полёт, призыв монстров</span></div></button>
       <button class="size" type="button" id="bMCS"><canvas id="mcIcon2" width="32" height="32"></canvas><div class="mc-txt"><b>Выживание</b><span>добывайте, крафтите, переживите ночь</span></div></button>
@@ -200,6 +206,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       <dt>Мир Minecraft</dt><dd>как в оригинале: ЛКМ — ломать и бить (можно зажать), ПКМ — ставить. Вода и лава растекаются, а где встречаются, застывают камнем. В воде Пробел — плыть вверх</dd>
       <dt>1–8 · колесо · Q</dt><dd>выбрать блок или монстра · переключить блоки и монстров</dd>
       <dt>Портал в Nether</dt><dd>рамка из обсидиана 4 × 5, зажгите огнивом (ПКМ) и постойте в сиянии. В выживании обсидиан получается, когда вода попадает на источник лавы</dd>
+      <dt>Портал в Энд</dt><dd>рамка из 12 блоков слева от старта. В выживании вставьте в каждый блок око Эндера (кварц и железо), потом прыгните в центр. Кристаллы на колоннах лечат дракона: сбейте их из лука</dd>
       <dt>Выживание</dt><dd>зажмите ЛКМ, чтобы добыть блок · E — инвентарь и крафт · ПКМ с едой — съесть · ночью приходят монстры</dd>
       <dt>M · H · Esc</dt><dd>карта · подсказка (+20 с) · пауза</dd>
       <dt>Телефон</dt><dd>левая половина — джойстик, правая — обзор, кнопки справа</dd>
@@ -405,6 +412,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     { id: "slime", name: "Слизень", hp: 4, speed: 3.4, r: 0.45, h: 0.9, dmg: 1, hop: true, face: ["#7cc95a", "#1f3b16", "#2f6a24"] },
     { id: "ghost", name: "Призрак", hp: 3, speed: 1.8, r: 0.4, h: 1.6, dmg: 2, fly: true, face: ["#eef1f4", "#2b3340", "#2b3340"] },
     { id: "golem", name: "Голем", hp: 16, speed: 1.5, r: 0.6, h: 2.6, dmg: 4, face: ["#9a9a94", "#c23a1e", "#4f7a34"] },
+    { id: "enderman", name: "Эндермен", hp: 10, speed: 3.4, r: 0.3, h: 2.9, dmg: 2, face: ["#141414", "#c86bff", "#141414"] },
   ];
 
   function part(parent, w, h, d, mat, x, y, z) {
@@ -471,6 +479,13 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       part(g, 0.12, 0.08, 0.02, eye, -0.14, 2.35, 0.41); part(g, 0.12, 0.08, 0.02, eye, 0.14, 2.35, 0.41);
       part(g, 0.12, 0.25, 0.12, iron, 0, 2.15, 0.44);
       a.arms.push(limb(g, 0.35, 1.5, 0.35, iron, -0.82, 2.0, 0), limb(g, 0.35, 1.5, 0.35, iron, 0.82, 2.0, 0));
+    } else if (type.id === "enderman") {
+      const skin = L(0x141414), eye = L(0xc86bff, { emissive: 0x9a30ff });
+      a.legs.push(limb(g, 0.16, 1.55, 0.16, skin, -0.12, 1.55, 0), limb(g, 0.16, 1.55, 0.16, skin, 0.12, 1.55, 0));
+      part(g, 0.5, 0.75, 0.26, skin, 0, 1.92, 0);
+      part(g, 0.5, 0.5, 0.5, skin, 0, 2.55, 0);
+      part(g, 0.14, 0.05, 0.02, eye, -0.12, 2.55, 0.26); part(g, 0.14, 0.05, 0.02, eye, 0.12, 2.55, 0.26);
+      a.arms.push(limb(g, 0.13, 1.45, 0.13, skin, -0.32, 2.25, 0), limb(g, 0.13, 1.45, 0.13, skin, 0.32, 2.25, 0));
     }
     mats.forEach((mm) => (mm.userData.base = mm.emissive.getHex()));
     return { g, mats, a };
@@ -765,8 +780,10 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (survival()) return survivalUse();
     const hit = aim();
     if (mode === "blocks") {
+      if (worldKind === "mc" && MC_ITEMS[selBlock] === BOW) { shootArrow(); return; }
       if (!hit) { toast("Слишком далеко, подойдите ближе"); return; }
       if (worldKind === "mc" && MC_ITEMS[selBlock] === FLINT) { ignite(hit); return; }
+      if (worldKind === "mc" && MC_ITEMS[selBlock] === ENDER_EYE) { insertEye(hit); return; }
       const { px, py, pz } = hit;
       if (py > (worldKind === "mc" ? MC_H - 1 : 40) || solidType(px, py, pz) !== 0) return;
       const overlaps = (e) => px + 1 > e.x - e.r && px < e.x + e.r && pz + 1 > e.z - e.r && pz < e.z + e.r && py + 1 > e.y && py < e.y + e.h;
@@ -794,6 +811,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (state !== "play" || attackCd > 0) return;
     attackCd = 0.28; swing = 0.25;
     const hit = aim();
+    if (worldKind === "mc" && dim === "end" && meleeEnd(hit ? hit.t : REACH)) return;
     let best = null, bt = Math.min(hit ? hit.t : REACH, 4.5);
     for (const m of monsters) {
       const cx = m.x - ray.o.x, cy = m.y + m.h / 2 - ray.o.y, cz = m.z - ray.o.z;
@@ -808,7 +826,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
         const k = vkey(hit.x, hit.y, hit.z); tnts = tnts.filter((q) => q.k !== k);
         burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, MCB[hit.type].color, 8, 3); mcSet(hit.x, hit.y, hit.z, 0);
       }
-      else if (hit.type < 0 && worldKind === "mc") toast("Бедрок не ломается");
+      else if (hit.type < 0 && worldKind === "mc") toast("Этот блок не ломается");
       else if (hit.type > 0) { const b = hit.type - 1; setBlock(hit.x, hit.y, hit.z, null); burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, b === TNT ? 0xc4302a : 0x9a8f80, 8, 3); }
       else if (hit.y >= 0) toast("Стены лабиринта прочные. Их берёт только динамит");
     }
@@ -866,7 +884,9 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       if (it) { const m = itemMat(id); if (it.block) hand.material = m; else { handFlat.visible = true; handFlat.material = m; } }
       return;
     }
-    hand.visible = mode === "blocks" && state !== "menu"; hand.material = blockList()[selBlock].mat;
+    const cur = blockList()[selBlock];
+    hand.visible = mode === "blocks" && state !== "menu" && !cur.flat; hand.material = cur.mat;
+    if (cur.flat && mode === "blocks" && state !== "menu") { handFlat.visible = true; handFlat.material = cur.mat; }
   }
   function blockList() { return worldKind === "mc" ? MC_LIST : BLOCKS; }
 
@@ -880,10 +900,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   const vi = (x, y, z) => (y * MC_W + z) * MC_W + x;
   function mcGet(x, y, z) { if (x < 0 || z < 0 || x >= MC_W || z >= MC_W || y < 0 || y >= MC_H || !vox.length) return 0; return vox[vi(x, y, z)]; }
   function mcSolid(x, y, z) {
-    if (y < 0 || x < 0 || z < 0 || x >= MC_W || z >= MC_W) return -1;
+    if (y < 0) return dim === "end" ? 0 : -1;
+    if (x < 0 || z < 0 || x >= MC_W || z >= MC_W) return -1;
     if (y >= MC_H) return 0;
     const v = vox[vi(x, y, z)];
-    if (v === 0 || v === WATER || v === MC_LAVA || v === PORTAL) return 0;
+    if (v === 0 || v === WATER || v === MC_LAVA || v === PORTAL || v === END_PORTAL) return 0;
+    if (v === END_FRAME || v === END_FRAME_EYE) return -1;
     return v === BEDROCK ? -1 : v;
   }
 
@@ -905,10 +927,16 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     netherrack: pix((x, n) => { speckle(x, n, [112, 42, 40], 22); x.fillStyle = "rgba(60,10,10,0.6)"; for (let i = 0; i < 16; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(1, 4) | 0, rnd(1, 3) | 0); }),
     soulsand: pix((x, n) => { speckle(x, n, [84, 64, 50], 12); x.fillStyle = "#2e2219"; for (let i = 0; i < 4; i++) { const a = rnd(2, n - 8) | 0, b = rnd(2, n - 8) | 0; x.fillRect(a, b, 2, 2); x.fillRect(a + 4, b, 2, 2); x.fillRect(a + 1, b + 4, 4, 2); } }),
     portal: pix((x, n) => { speckle(x, n, [110, 36, 200], 26); x.fillStyle = "rgba(220,170,255,0.7)"; for (let i = 0; i < 12; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(3, 9) | 0, 1); }),
+    endstone: pix((x, n) => { speckle(x, n, [221, 222, 162], 12); x.fillStyle = "rgba(150,150,90,0.5)"; for (let i = 0; i < 14; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(1, 3) | 0, rnd(1, 3) | 0); }),
+    frameTop: pix((x, n) => { speckle(x, n, [60, 104, 90], 10); x.fillStyle = "#c9c79a"; x.fillRect(0, 0, n, 3); x.fillRect(0, n - 3, n, 3); x.fillRect(0, 0, 3, n); x.fillRect(n - 3, 0, 3, n); x.fillStyle = "#1d3a32"; x.fillRect(10, 10, 12, 12); }),
+    frameSide: pix((x, n) => { speckle(x, n, [221, 222, 162], 10); x.fillStyle = "#3c6a5a"; x.fillRect(0, 0, n, 9); x.fillStyle = "#2a4a3e"; for (let i = 2; i < n; i += 6) x.fillRect(i, 9, 3, 2); }),
+    frameEye: pix((x, n) => { speckle(x, n, [60, 104, 90], 10); x.fillStyle = "#c9c79a"; x.fillRect(0, 0, n, 3); x.fillRect(0, n - 3, n, 3); x.fillRect(0, 0, 3, n); x.fillRect(n - 3, 0, 3, n); x.fillStyle = "#2e8b57"; x.fillRect(9, 9, 14, 14); x.fillStyle = "#0b2a1a"; x.fillRect(14, 12, 4, 8); }),
+    endPortal: pix((x, n) => { x.fillStyle = "#06060f"; x.fillRect(0, 0, n, n); const cs = ["#2fe0c0", "#7a5cff", "#ff5cd0", "#ffffff", "#3aa0ff"]; for (let i = 0; i < 26; i++) { x.fillStyle = cs[i % cs.length]; x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, 1, 1); } }),
+    egg: pix((x, n) => { speckle(x, n, [24, 12, 34], 8); x.fillStyle = "#7a3aa8"; for (let i = 0; i < 18; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, 1, 1); }),
     quartz: pix((x, n) => { speckle(x, n, [112, 42, 40], 22); x.fillStyle = "#f1ebe2"; for (let i = 0; i < 7; i++) x.fillRect(rnd(2, n - 5) | 0, rnd(2, n - 4) | 0, rnd(2, 4) | 0, 2); }),
     water: pix((x, n) => { speckle(x, n, [48, 96, 200], 14); x.fillStyle = "rgba(255,255,255,0.2)"; for (let i = 0; i < 10; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(3, 7) | 0, 1); }),
   };
-  const TILES = ["stone", "planks", "grassTop", "grassSide", "dirt", "glass", "gold", "glow", "lava", "tntSide", "tntTop", "sand", "logSide", "logTop", "leaves", "cobble", "coal", "iron", "diamond", "bedrock", "water", "obsidian", "netherrack", "soulsand", "portal", "quartz"];
+  const TILES = ["stone", "planks", "grassTop", "grassSide", "dirt", "glass", "gold", "glow", "lava", "tntSide", "tntTop", "sand", "logSide", "logTop", "leaves", "cobble", "coal", "iron", "diamond", "bedrock", "water", "obsidian", "netherrack", "soulsand", "portal", "quartz", "endstone", "frameTop", "frameSide", "frameEye", "endPortal", "egg"];
   const tileSrc = Object.assign({ stone: C.stone, planks: C.wood, grassTop: C.grassTop, grassSide: C.grassSide, dirt: C.dirt, glass: C.glass, gold: C.gold, glow: C.glow, lava: C.lava, tntSide: C.tntSide, tntTop: C.tntTop }, C2);
   const AT_C = 8, AT_R = 4, tileIdx = {};
   const atlasCanvas = document.createElement("canvas"); atlasCanvas.width = AT_C * 32; atlasCanvas.height = AT_R * 32;
@@ -930,11 +958,19 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   def(19, "Обсидиан", "obsidian", 0, 0, 0, "#1c1426"); def(20, "Незерак", "netherrack", 0, 0, 0, "#6e2a2a");
   def(21, "Песок душ", "soulsand", 0, 0, 0, "#50402f"); def(22, "Портал", "portal", 0, 0, "portal", "#8a3ad8");
   def(23, "Кварцевая руда", "quartz", 0, 0, 0, "#b0807a");
+  def(24, "Камень Энда", "endstone", 0, 0, 0, "#dcd9a2"); def(25, "Рамка портала Энда", "frameTop", "frameSide", "endstone", 0, "#3d6b5a");
+  def(26, "Рамка с оком", "frameEye", "frameSide", "endstone", 0, "#2e8b57"); def(27, "Портал Энда", "endPortal", 0, 0, "portal", "#0b0b18");
+  def(28, "Яйцо дракона", "egg", 0, 0, 0, "#1a0f24");
   const OBSIDIAN = 19, NETHERRACK = 20, SOULSAND = 21, PORTAL = 22, QUARTZ = 23, FLINT = 130;
+  const END_STONE = 24, END_FRAME = 25, END_FRAME_EYE = 26, END_PORTAL = 27, DRAGON_EGG = 28, BOW = 140, ENDER_EYE = 141, ARROW = 142;
+  const bowIcon = pix((x) => { x.scale(2, 2); x.fillStyle = "#8a6236"; for (let i = 0; i < 6; i++) { x.fillRect(3 + i, 2 + i * 0.4 | 0, 2, 2); x.fillRect(2 + i * 0.4 | 0, 3 + i, 2, 2); } x.fillRect(9, 4, 2, 2); x.fillRect(11, 6, 2, 3); x.fillRect(4, 9, 2, 2); x.fillRect(6, 11, 3, 2); x.fillStyle = "#eeeeee"; for (let i = 0; i < 9; i++) x.fillRect(12 - i, 3 + i, 1, 1); });
+  const eyeIcon = pix((x) => { x.scale(2, 2); x.fillStyle = "#1f6b4a"; x.beginPath(); x.arc(8, 8, 6, 0, TAU); x.fill(); x.fillStyle = "#57d38f"; x.beginPath(); x.arc(8, 8, 4, 0, TAU); x.fill(); x.fillStyle = "#0b2a1a"; x.fillRect(7, 5, 2, 6); });
+  const arrowIcon = pix((x) => { x.scale(2, 2); x.fillStyle = "#8a6236"; for (let i = 0; i < 9; i++) x.fillRect(3 + i, 12 - i, 1, 1); x.fillStyle = "#cfcfcf"; x.fillRect(11, 2, 3, 2); x.fillRect(12, 2, 2, 3); x.fillStyle = "#eeeeee"; x.fillRect(2, 12, 2, 2); x.fillRect(3, 13, 2, 1); });
   const flintIcon = pix((x) => { x.scale(2, 2); x.fillStyle = "#d8d8d4"; x.fillRect(2, 8, 7, 3); x.fillRect(7, 5, 2, 4); x.fillStyle = "#3a3a3a"; x.fillRect(9, 3, 4, 5); x.fillRect(10, 2, 2, 7); x.fillStyle = "#ffb347"; x.fillRect(12, 1, 2, 2); });
-  const MC_ITEMS = [3, 9, 1, 13, 2, 11, 12, 4, 8, 10, 5, 6, 7, 14, 15, 16, 18, 19, FLINT, 20, 21, 23];
+  const MC_ITEMS = [3, 9, 1, 13, 2, 11, 12, 4, 8, 10, 5, 6, 7, 14, 15, 16, 18, 19, FLINT, 20, 21, 23, BOW, ENDER_EYE, 24, 28];
   const MC_LIST = MC_ITEMS.map((id) => {
-    if (id === FLINT) return { name: "Огниво", icon: flintIcon, mat: new THREE.MeshLambertMaterial({ map: tex(flintIcon), transparent: true, alphaTest: 0.1 }) };
+    const special = { [FLINT]: ["Огниво", flintIcon], [BOW]: ["Лук", bowIcon], [ENDER_EYE]: ["Око Эндера", eyeIcon] }[id];
+    if (special) return { name: special[0], icon: special[1], flat: true, mat: new THREE.MeshLambertMaterial({ map: tex(special[1]), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide }) };
     const icon = tileSrc[TILES[MCB[id].t[1]]];
     return { name: MCB[id].name, icon, mat: new THREE.MeshLambertMaterial({ map: tex(icon), transparent: MCB[id].kind !== "opaque", alphaTest: 0.1 }) };
   });
@@ -1083,7 +1119,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     for (let x = Math.floor(cx - 3); x <= cx + 3; x++) for (let y = Math.floor(cy - 3); y <= cy + 3; y++) for (let z = Math.floor(cz - 3); z <= cz + 3; z++) {
       if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz) > 3.2 + Math.random() * 0.6) continue;
       const id = mcGet(x, y, z);
-      if (!id || id === BEDROCK || id === WATER || id === MC_LAVA || id === OBSIDIAN || id === PORTAL) continue;
+      if (!id || id === BEDROCK || id === WATER || id === MC_LAVA || id === OBSIDIAN || id === PORTAL || id >= END_FRAME && id <= END_PORTAL) continue;
       if (id === MC_TNT) { const k = vkey(x, y, z), t = tnts.find((q) => q.k === k); if (t) { t.t = Math.min(t.t, 0.25); continue; } }
       vox[vi(x, y, z)] = 0; dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z);
     }
@@ -1164,6 +1200,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       mcTopX.fillStyle = `rgb(${Math.min(255, tmpC.r * 255 * k) | 0},${Math.min(255, tmpC.g * 255 * k) | 0},${Math.min(255, tmpC.b * 255 * k) | 0})`;
       mcTopX.fillRect(x, z, 1, 1); return;
     }
+    mcTopX.clearRect(x, z, 1, 1);
   }
   function drawMiniMC() {
     const W = 336, cell = 4;
@@ -1233,6 +1270,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     Object.assign(spawn, { x: best[0] + 0.5, y: sy + 1, z: best[1] + 0.5 });
     const fx = Math.max(3, Math.min(MC_W - 8, best[0] - 1)), fz = Math.max(4, Math.min(MC_W - 5, best[1] + 5));
     placeFrame(fx, sy + 1, fz, gameMode !== "survival", 9);
+    placeEndFrame(Math.max(4, best[0] - 8), sy + 1, best[1], gameMode !== "survival");
   }
   function hash3(x, y, z, s) { return hash(x + Math.imul(y, 7919), z - Math.imul(y, 104729), s); }
   function vnoise3(x, y, z, s) {
@@ -1266,26 +1304,34 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   // dimensions: the overworld and the Nether keep their blocks while you are away
   let dim = "over", dims = {}, portalT = 0, needExit = false;
-  function travel() {
-    const to = dim === "over" ? "nether" : "over";
-    dims[dim] = { vox, fl, portalPos: { x: player.x, y: player.y, z: player.z }, spawn: { ...spawn } };
-    clearMonsters(); tnts = [];
+  function travel(to) {
+    const from = dim;
+    dims[from] = Object.assign(dims[from] || {}, { vox, fl, spawn: { ...spawn } });
+    if (to === "nether" || from === "nether") dims[from].portalPos = { x: player.x, y: player.y, z: player.z };
+    if (from === "end") saveEnd();
+    clearMonsters(); clearEndEntities(); tnts = [];
     particles.forEach((p) => scene.remove(p.p)); particles = [];
     disposeWorld(); dim = to;
     let arrive;
-    if (dims[to]) { vox = dims[to].vox; fl = dims[to].fl; arrive = dims[to].portalPos; needExit = true; Object.assign(spawn, dims[to].spawn); }
-    else {
+    if (dims[to] && dims[to].vox) {
+      vox = dims[to].vox; fl = dims[to].fl; Object.assign(spawn, dims[to].spawn);
+      arrive = to === "nether" || (to === "over" && from === "nether") ? dims[to].portalPos : { ...spawn };
+      needExit = true;
+    } else if (to === "nether") {
       netherGenerate();
       const fx = Math.max(4, Math.min(MC_W - 9, Math.floor(player.x) - 1)), fz = Math.max(5, Math.min(MC_W - 6, Math.floor(player.z)));
       placeFrame(fx, 22, fz, true, NETHERRACK);
       arrive = { x: fx + 2, y: 22, z: fz + 2.5 }; needExit = false; Object.assign(spawn, arrive);
+    } else {
+      endGenerate(); arrive = { ...spawn }; needExit = false;
     }
     fluidQ[WATER].clear(); fluidQ[MC_LAVA].clear();
     mcBuildAll(); applyAtmosphere("mc"); underwater = 0;
     Object.assign(player, { x: arrive.x, y: arrive.y, z: arrive.z, vy: 0, kx: 0, kz: 0 });
     if (to === "nether") player.yaw = 0;
-    peakY = player.y; portalT = 0; dayF = to === "nether" ? 0 : dayF;
-    toast(to === "nether" ? "Nether" : "Верхний мир");
+    if (to === "end") { player.yaw = Math.atan2(player.x - 64, player.z - 64); enterEnd(); }
+    peakY = player.y; portalT = 0; dayF = to === "over" ? dayF : 0;
+    toast(to === "nether" ? "Nether" : to === "end" ? "Энд. Где-то над островом летает дракон" : "Верхний мир");
   }
   const cloudTex = (() => {
     const c = pix((x, n) => { x.fillStyle = "#fff"; for (let i = 0; i < 60; i++) x.fillRect(rnd(0, n) | 0, rnd(0, n) | 0, rnd(2, 8) | 0, rnd(1, 4) | 0); }, 64);
@@ -1300,6 +1346,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     clouds.rotation.x = -Math.PI / 2; clouds.position.set(MC_W / 2, 72, MC_W / 2); world.add(clouds);
     if (gameMode === "survival") { stars = makeStars(); world.add(stars); }
     }
+    if (dim === "end") { const st = makeStars(); st.material.opacity = 0.9; st.material.color.setHex(0xc8b0ff); world.add(st); }
     mcTopX.clearRect(0, 0, MC_W, MC_W);
     for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) mcColumn(x, z);
   }
@@ -1318,6 +1365,12 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       if (skyMesh) skyMesh.visible = false;
       hemi.color.setHex(0xff9a6a); hemi.groundColor.setHex(0x5a1a0a); hemi.intensity = 0.9;
       sun.color.setHex(0xff7a40); sun.intensity = 0.35;
+    }
+    if (mc && dim === "end") {
+      scene.background.setHex(0x120d1d); scene.fog.color.setHex(0x120d1d); scene.fog.near = 20; scene.fog.far = 110;
+      if (skyMesh) skyMesh.visible = false;
+      hemi.color.setHex(0xc8b8e8); hemi.groundColor.setHex(0x2a2238); hemi.intensity = 0.7;
+      sun.color.setHex(0xd8c8ff); sun.intensity = 0.45;
     }
   }
 
@@ -1342,7 +1395,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     });
   }
   const ITEMS = {};
-  for (const id of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 23]) ITEMS[id] = { name: MCB[id].name, icon: tileSrc[TILES[MCB[id].t[1]]], block: id };
+  for (const id of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 23, 24, 28]) ITEMS[id] = { name: MCB[id].name, icon: tileSrc[TILES[MCB[id].t[1]]], block: id };
   Object.assign(ITEMS, {
     100: { name: "Палка", icon: icon16((x) => { x.fillStyle = "#8a6236"; for (let i = 0; i < 10; i++) x.fillRect(3 + i, 12 - i, 2, 2); }) },
     101: { name: "Яблоко", food: 4, icon: icon16((x) => { x.fillStyle = "#d0302a"; x.beginPath(); x.arc(8, 10, 5, 0, TAU); x.fill(); x.fillStyle = "#ff8a80"; x.fillRect(5, 8, 2, 2); x.fillStyle = "#5a3a1a"; x.fillRect(8, 2, 1, 4); x.fillStyle = "#4caf50"; x.fillRect(9, 3, 3, 2); }) },
@@ -1353,6 +1406,9 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     106: { name: "Кость", icon: icon16((x) => { x.fillStyle = "#eeeae0"; for (let i = 0; i < 8; i++) x.fillRect(4 + i, 11 - i, 2, 2); x.fillRect(2, 11, 3, 3); x.fillRect(11, 2, 3, 3); }) },
     108: { name: "Кварц", icon: icon16((x) => { x.fillStyle = "#f1ebe2"; x.fillRect(4, 5, 8, 6); x.fillRect(6, 3, 4, 10); x.fillStyle = "#c9bfb2"; x.fillRect(9, 6, 2, 4); }) },
     [FLINT]: { name: "Огниво", icon: flintIcon },
+    [BOW]: { name: "Лук", icon: bowIcon },
+    [ENDER_EYE]: { name: "Око Эндера", icon: eyeIcon },
+    [ARROW]: { name: "Стрела", icon: arrowIcon },
     107: { name: "Нить", icon: icon16((x) => { x.fillStyle = "#f4f4f4"; for (let i = 0; i < 12; i++) x.fillRect(2 + i, 8 + Math.round(Math.sin(i * 0.9) * 3), 1, 1); }) },
   });
   const TIERS = [["Деревянная", "Деревянный", "#a87a48"], ["Каменная", "Каменный", "#8a8a86"], ["Железная", "Железный", "#e4e4e0"], ["Алмазная", "Алмазный", "#5cdbd5"]];
@@ -1377,6 +1433,9 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     { out: 6, n: 1, need: { 4: 1, 103: 2 } },
     { out: 8, n: 1, need: { 10: 4, 103: 2 } },
     { out: FLINT, n: 1, need: { 104: 1, 103: 1 } },
+    { out: BOW, n: 1, need: { 100: 3, 107: 3 } },
+    { out: ARROW, n: 4, need: { 100: 1, 106: 1 } },
+    { out: ENDER_EYE, n: 2, need: { 108: 1, 104: 1 } },
   ];
   const itemMats = {};
   function itemMat(id) {
@@ -1404,8 +1463,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     return t && t.type === "sword" ? [2, 2.5, 3, 3.5][t.tier] : 1;
   }
   // seconds to break by hand; blocks in NEEDS_PICK drop nothing without a good enough pickaxe
-  const HARD = { 1: 1.5, 2: 2, 3: 0.6, 4: 0.3, 5: 3, 6: 0.3, 8: 0.05, 9: 0.5, 10: 0.5, 11: 2, 12: 0.2, 13: 2, 14: 3, 15: 3, 16: 3, 19: 10, 20: 0.4, 21: 0.5, 23: 3 };
-  const NEEDS_PICK = { 1: 0, 13: 0, 14: 0, 15: 1, 16: 2, 5: 2, 19: 3, 20: 0, 23: 0 };
+  const HARD = { 1: 1.5, 2: 2, 3: 0.6, 4: 0.3, 5: 3, 6: 0.3, 8: 0.05, 9: 0.5, 10: 0.5, 11: 2, 12: 0.2, 13: 2, 14: 3, 15: 3, 16: 3, 19: 10, 20: 0.4, 21: 0.5, 23: 3, 24: 3, 28: 0.5 };
+  const NEEDS_PICK = { 1: 0, 13: 0, 14: 0, 15: 1, 16: 2, 5: 2, 19: 3, 20: 0, 23: 0, 24: 0 };
   function pickTier() { const t = heldTool(); return t && t.type === "pick" ? t.tier : -1; }
   function breakTime(id) {
     const h = HARD[id] !== undefined ? HARD[id] : 1, tier = pickTier();
@@ -1464,6 +1523,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       return;
     }
     if (id === FLINT) { ignite(aim()); return; }
+    if (id === BOW) { if (!inv[ARROW]) { toast("Нет стрел. Стрелы делают из палки и кости"); return; } if (shootArrow()) take(ARROW); return; }
+    if (id === ENDER_EYE) { if (insertEye(aim())) take(ENDER_EYE); return; }
     if (!it.block) return;
     const hit = aim(); if (!hit) return;
     const { px, py, pz } = hit;
@@ -1590,8 +1651,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       if (dim === "nether") { y = 10; while (y < MC_H - 3 && !(vox[vi(x, y, z)] && !vox[vi(x, y + 1, z)] && !vox[vi(x, y + 2, z)])) y++; if (y >= MC_H - 3) continue; }
       else while (y > 0 && vox[vi(x, y, z)] === 0) y--;
       const top = vox[vi(x, y, z)];
-      if (top === WATER || top === MC_LAVA || top === LEAVES) continue;
-      const pool = dim === "nether" ? [4, 4, 1, 0, 5] : [0, 0, 1, 2];
+      if (!top || top === WATER || top === MC_LAVA || top === LEAVES) continue;
+      const pool = dim === "nether" ? [4, 4, 1, 0, 5] : dim === "end" ? [6] : [0, 0, 1, 2];
       if (spawnMonster(pool[(Math.random() * pool.length) | 0], x + 0.5, y + 1, z + 0.5, true)) { monsters[monsters.length - 1].natural = true; return; }
     }
   }
@@ -1606,6 +1667,226 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   $("tHit").addEventListener("pointerdown", () => (touchMine = true));
   for (const ev of ["pointerup", "pointercancel", "pointerleave"]) $("tHit").addEventListener(ev, () => (touchMine = false));
   { const g = $("mcIcon2").getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(toolIcon("pick", "#5cdbd5"), 0, 0); }
+
+  // ---------- the End: floating island, crystals, dragon, arrows ----------
+  let endFrame = null, dragon = null, crystals = [], arrows = [], bowCd = 0;
+  const EC = 64; // island centre
+  function placeEndFrame(cx, y, cz, active) {
+    for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+      const x = cx + dx, z = cz + dz; if (!inMC(x, y, z)) continue;
+      for (let yy = y; yy <= y + 4 && yy < MC_H; yy++) { vox[vi(x, yy, z)] = 0; fl[vi(x, yy, z)] = 0; }
+      if (y > 0) { vox[vi(x, y - 1, z)] = 1; fl[vi(x, y - 1, z)] = 0; }
+      const ax = Math.abs(dx), az = Math.abs(dz);
+      if (ax <= 2 && az <= 2 && (ax === 2) !== (az === 2)) vox[vi(x, y, z)] = active ? END_FRAME_EYE : END_FRAME;
+      if (ax <= 1 && az <= 1 && active) vox[vi(x, y, z)] = END_PORTAL;
+    }
+    endFrame = { cx, y, cz };
+  }
+  function insertEye(hit) {
+    if (!hit || mcGet(hit.x, hit.y, hit.z) !== END_FRAME) { toast("Око вставляют в рамку портала Энда"); return false; }
+    mcSet(hit.x, hit.y, hit.z, END_FRAME_EYE);
+    burst(hit.x + 0.5, hit.y + 1, hit.z + 0.5, 0x57d38f, 8, 1.5);
+    if (endFrame && dim === "over") {
+      const { cx, y, cz } = endFrame; let filled = 0;
+      for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) { const ax = Math.abs(dx), az = Math.abs(dz); if ((ax === 2) !== (az === 2) && mcGet(cx + dx, y, cz + dz) === END_FRAME_EYE) filled++; }
+      if (filled === 12) {
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) { vox[vi(cx + dx, y, cz + dz)] = END_PORTAL; dirtyChunk(cx + dx, cz + dz); }
+        flushChunks(); toast("Портал в Энд открыт");
+      } else toast(`Око вставлено: ${filled} из 12`);
+    }
+    return true;
+  }
+  function endGenerate() {
+    vox = new Uint8Array(MC_W * MC_W * MC_H); fl = new Uint8Array(vox.length);
+    const seed = (Math.random() * 1e9) | 0;
+    for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
+      const d = Math.hypot(x - EC, z - EC), r = 34 + (vnoise(x / 9, z / 9, seed) - 0.5) * 8;
+      if (d >= r) continue;
+      const k = 1 - d / r, top = 22 + Math.floor(k * 2), depth = Math.floor((1 - (d / r) ** 2) * 13) + 1;
+      for (let y = Math.max(1, top - depth); y <= top; y++) vox[vi(x, y, z)] = END_STONE;
+    }
+    const cr = [];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU, px = Math.round(EC + Math.cos(a) * 24), pz = Math.round(EC + Math.sin(a) * 24);
+      const rad = 2 + (i % 2), h = 30 + ((i * 5) % 12);
+      for (let dx = -rad; dx <= rad; dx++) for (let dz = -rad; dz <= rad; dz++) if (dx * dx + dz * dz <= rad * rad + 0.5) for (let y = 14; y <= h; y++) vox[vi(px + dx, y, pz + dz)] = OBSIDIAN;
+      vox[vi(px, h + 1, pz)] = BEDROCK;
+      cr.push({ x: px + 0.5, y: h + 2.4, z: pz + 0.5 });
+    }
+    let sy = MC_H - 1; const sx = EC + 28, sz = EC;
+    while (sy > 0 && !vox[vi(sx, sy, sz)]) sy--;
+    Object.assign(spawn, { x: sx + 0.5, y: sy + 1, z: sz + 0.5 });
+    dims.end = Object.assign(dims.end || {}, { crystals: cr, dragonDead: false, dragonHp: 60, fresh: true });
+  }
+  function islandTop(x, z) { let y = MC_H - 1; while (y > 0 && !vox[vi(x, y, z)]) y--; return y; }
+  function makeDragon() {
+    const g = new THREE.Group(), mats = [];
+    const M = (c, o) => { const m = new THREE.MeshLambertMaterial(Object.assign({ color: c }, o || {})); mats.push(m); return m; };
+    const dark = M(0x1b1b22), mem = M(0x2e2c3a, { side: THREE.DoubleSide }), eye = new THREE.MeshBasicMaterial({ color: 0xd060ff });
+    const P = (parent, w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(unitBox, mat); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+    P(g, 2.4, 1.7, 5.2, dark, 0, 0, 0);
+    for (let i = 0; i < 5; i++) P(g, 0.3, 0.6, 0.4, dark, 0, 1.1, -2 + i);
+    P(g, 1.1, 1, 3, dark, 0, 0.4, 3.9);
+    P(g, 1.7, 1.2, 2.2, dark, 0, 0.6, 6.3); P(g, 1.4, 0.4, 1.9, dark, 0, -0.15, 6.5);
+    P(g, 0.32, 0.18, 0.1, eye, -0.55, 0.9, 7.42); P(g, 0.32, 0.18, 0.1, eye, 0.55, 0.9, 7.42);
+    P(g, 0.25, 0.6, 0.25, dark, -0.5, 1.4, 5.8); P(g, 0.25, 0.6, 0.25, dark, 0.5, 1.4, 5.8);
+    for (let i = 0; i < 7; i++) P(g, 1 - i * 0.12, 0.9 - i * 0.1, 1.4, dark, 0, 0.1, -3.3 - i * 1.35);
+    for (const sx of [-1, 1]) { P(g, 0.5, 1.2, 0.6, dark, sx * 0.9, -1.1, 1.6); P(g, 0.5, 1.2, 0.6, dark, sx * 0.9, -1.1, -1.6); }
+    const wings = [];
+    for (const sx of [-1, 1]) {
+      const pv = new THREE.Group(); pv.position.set(sx * 1.2, 0.7, 0.8); g.add(pv);
+      P(pv, 6, 0.3, 0.45, dark, sx * 3, 0, 1.2); P(pv, 6, 0.08, 3.6, mem, sx * 3, 0, -0.7);
+      pv.userData.s = sx; wings.push(pv);
+    }
+    g.rotation.order = "YXZ";
+    return { g, mats, wings };
+  }
+  function makeCrystal(c) {
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: 0xff6ad5 })); core.scale.setScalar(0.55); g.add(core);
+    const cage = new THREE.Mesh(unitBox, new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })); cage.scale.setScalar(1.1); g.add(cage);
+    g.position.set(c.x, c.y, c.z); scene.add(g);
+    return { ...c, g, core, cage, alive: true };
+  }
+  const beamGeo = new THREE.BufferGeometry(); beamGeo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(16 * 3), 3));
+  const beams = new THREE.LineSegments(beamGeo, new THREE.LineBasicMaterial({ color: 0xff8af0 })); beams.frustumCulled = false; beams.visible = false; scene.add(beams);
+  function enterEnd() {
+    const e = dims.end;
+    crystals = e.crystals.map(makeCrystal);
+    if (!e.dragonDead) {
+      const d = makeDragon(); scene.add(d.g);
+      dragon = Object.assign(d, { x: EC, y: 36, z: EC - 26, yaw: 0, pitch: 0, hp: e.dragonHp, max: 60, phase: "circle", t: 0, ang: -Math.PI / 2, cycles: 0, cool: 0, flash: 0, dying: -1 });
+      $("boss").hidden = false;
+    }
+    if (e.fresh) {
+      e.fresh = false;
+      for (let i = 0; i < 6; i++) { const a = rnd(0, TAU), r = rnd(6, 26), x = Math.floor(EC + Math.cos(a) * r), z = Math.floor(EC + Math.sin(a) * r); spawnMonster(6, x + 0.5, islandTop(x, z) + 1, z + 0.5, true); }
+    }
+  }
+  function saveEnd() {
+    if (!dims.end) return;
+    dims.end.crystals = crystals.filter((c) => c.alive).map(({ x, y, z }) => ({ x, y, z }));
+    if (dragon) dims.end.dragonHp = dragon.hp;
+  }
+  function clearEndEntities() {
+    crystals.forEach((c) => scene.remove(c.g)); crystals = [];
+    if (dragon) { scene.remove(dragon.g); dragon.mats.forEach((m) => m.dispose()); dragon = null; }
+    arrows.forEach((a) => scene.remove(a.m)); arrows = [];
+    beams.visible = false; $("boss").hidden = true;
+  }
+  function crystalBoom(c) {
+    if (!c.alive) return;
+    c.alive = false; scene.remove(c.g); explode(c.x, c.y, c.z);
+    toast(`Кристалл уничтожен. Осталось: ${crystals.filter((q) => q.alive).length}`);
+  }
+  function hurtDragon(dmg) {
+    if (!dragon || dragon.dying >= 0) return;
+    dragon.hp -= dmg; dragon.flash = 0.18;
+    burst(dragon.x, dragon.y + 1, dragon.z, 0xd060ff, 6, 3);
+    if (dragon.hp <= 0) { dragon.hp = 0; dragon.dying = 0; toast("Эндер-дракон повержен!"); }
+    else if (dragon.phase === "perch" && Math.random() < 0.25) { dragon.phase = "circle"; dragon.t = 0; }
+  }
+  // melee in the End: dragon (when close) and crystals within reach
+  function meleeEnd(maxT) {
+    const o = ray.o, d = ray.d;
+    const test = (x, y, z, rad, reach) => { const cx = x - o.x, cy = y - o.y, cz = z - o.z, t = cx * d.x + cy * d.y + cz * d.z; return t > 0 && t < Math.min(reach, maxT + 0.5) && cx * cx + cy * cy + cz * cz - t * t < rad * rad; };
+    for (const c of crystals) if (c.alive && test(c.x, c.y, c.z, 1, 5)) { crystalBoom(c); return true; }
+    if (dragon && dragon.dying < 0 && test(dragon.x, dragon.y, dragon.z, 3.2, 7)) { hurtDragon(swordDamage()); return true; }
+    return false;
+  }
+  function shootArrow() {
+    if (bowCd > 0) return false;
+    bowCd = 0.35; swing = 0.25;
+    const o = ray.o.clone(), d = ray.d.clone();
+    camera.getWorldPosition(o); camera.getWorldDirection(d);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.7), new THREE.MeshLambertMaterial({ color: 0x8a6236 }));
+    m.position.copy(o).addScaledVector(d, 0.6); scene.add(m);
+    arrows.push({ m, v: d.multiplyScalar(40), life: 6, stuck: false });
+    return true;
+  }
+  function endDefeated() {
+    dims.end.dragonDead = true; $("boss").hidden = true; beams.visible = false;
+    const top = islandTop(EC, EC) + 1;
+    for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+      const r = Math.max(Math.abs(dx), Math.abs(dz)), x = EC + dx, z = EC + dz;
+      for (let y = top; y < top + 6; y++) vox[vi(x, y, z)] = 0;
+      vox[vi(x, top - 1, z)] = BEDROCK;
+      if (r === 3 || (Math.abs(dx) === 2 && Math.abs(dz) === 2)) vox[vi(x, top, z)] = BEDROCK;
+      else if (r <= 2) vox[vi(x, top, z)] = END_PORTAL;
+      dirtyChunk(x, z); mcColumn(x, z);
+    }
+    for (let y = top; y < top + 4; y++) vox[vi(EC, y, EC)] = BEDROCK;
+    vox[vi(EC, top + 4, EC)] = DRAGON_EGG;
+    flushChunks();
+    toast("Портал домой открыт в центре острова. На нём лежит яйцо дракона");
+  }
+  function updateEnd(dt, now) {
+    bowCd -= dt;
+    // arrows
+    for (let i = arrows.length - 1; i >= 0; i--) {
+      const a = arrows[i]; a.life -= dt;
+      if (!a.stuck) {
+        let hitSomething = false;
+        for (let s = 0; s < 3 && !hitSomething; s++) {
+          a.v.y -= 14 * dt / 3; a.m.position.addScaledVector(a.v, dt / 3);
+          const p = a.m.position;
+          for (const m of monsters) if (Math.hypot(m.x - p.x, m.y + m.h / 2 - p.y, m.z - p.z) < Math.max(m.r, m.h / 2) + 0.2) { m.hitByPlayer = true; hurtMonster(m, 3, p.x - a.v.x, p.z - a.v.z, 5); hitSomething = true; break; }
+          if (!hitSomething) for (const c of crystals) if (c.alive && Math.hypot(c.x - p.x, c.y - p.y, c.z - p.z) < 1.3) { crystalBoom(c); hitSomething = true; break; }
+          if (!hitSomething && dragon && dragon.dying < 0 && Math.hypot(dragon.x - p.x, dragon.y - p.y, dragon.z - p.z) < 3.4) { hurtDragon(3); hitSomething = true; }
+          if (!hitSomething && solidAt(p.x, p.y, p.z)) { a.stuck = true; a.life = Math.min(a.life, 3); break; }
+        }
+        if (hitSomething) a.life = 0;
+        else a.m.lookAt(a.m.position.x + a.v.x, a.m.position.y + a.v.y, a.m.position.z + a.v.z);
+      }
+      if (a.life <= 0) { scene.remove(a.m); a.m.geometry.dispose(); a.m.material.dispose(); arrows.splice(i, 1); }
+    }
+    if (dim !== "end") return;
+    crystals.forEach((c, i) => { if (!c.alive) return; c.core.rotation.set(now * 1.3, now * 1.7, 0); c.cage.rotation.set(-now, now * 0.8, now * 0.5); c.g.position.y = c.y + Math.sin(now * 2 + i) * 0.25; });
+    if (!dragon) return;
+    const D = dragon;
+    if (D.dying >= 0) {
+      D.dying += dt; D.y += dt * 2.5; D.g.position.set(D.x, D.y, D.z); D.g.rotation.y += dt * 0.6;
+      if (Math.random() < dt * 30) burst(D.x + rnd(-3, 3), D.y + rnd(-2, 2), D.z + rnd(-3, 3), Math.random() < 0.5 ? 0xd060ff : 0xffe6ff, 3, 6);
+      beams.visible = false;
+      if (D.dying > 3.5) { scene.remove(D.g); D.mats.forEach((m) => m.dispose()); dragon = null; endDefeated(); }
+      return;
+    }
+    D.t += dt; D.cool -= dt; D.flash -= dt;
+    let tx, ty, tz, sp;
+    const groundY = islandTop(EC, EC);
+    if (D.phase === "circle") {
+      D.ang += dt * 0.33;
+      tx = EC + Math.cos(D.ang) * 26; tz = EC + Math.sin(D.ang) * 26; ty = 36 + Math.sin(D.ang * 2) * 3; sp = 12;
+      if (D.t > 11) { D.t = 0; D.cycles++; D.phase = D.cycles % 3 === 0 ? "perch" : "swoop"; }
+    } else if (D.phase === "swoop") {
+      tx = player.x; ty = player.y + 1.2; tz = player.z; sp = 17;
+      if (D.t > 6 || Math.hypot(tx - D.x, ty - D.y, tz - D.z) < 2.5) { D.phase = "circle"; D.t = 0; D.ang = Math.atan2(D.z - EC, D.x - EC); }
+    } else {
+      tx = EC; ty = groundY + 3; tz = EC - 4; sp = 9;
+      if (D.t > 10) { D.phase = "circle"; D.t = 0; D.ang = Math.atan2(D.z - EC, D.x - EC); }
+    }
+    const dx = tx - D.x, dy = ty - D.y, dz = tz - D.z, dist = Math.hypot(dx, dy, dz);
+    const step = Math.min(dist, sp * dt * (D.phase === "perch" && dist < 3 ? 0.2 : 1));
+    if (dist > 0.01) { D.x += dx / dist * step; D.y += dy / dist * step; D.z += dz / dist * step; }
+    if (Math.hypot(dx, dz) > 0.5) D.yaw = lerpAngle(D.yaw, Math.atan2(dx, dz), dt * 2.5);
+    D.pitch += (-Math.atan2(dy, Math.hypot(dx, dz) + 0.01) * 0.6 - D.pitch) * Math.min(1, dt * 3);
+    D.g.position.set(D.x, D.y, D.z); D.g.rotation.y = D.yaw; D.g.rotation.x = D.phase === "perch" && dist < 3 ? 0 : D.pitch;
+    D.wings.forEach((w) => (w.rotation.z = w.userData.s * Math.sin(now * (D.phase === "perch" && dist < 3 ? 2 : 4.5)) * 0.55));
+    D.mats.forEach((m) => m.emissive.setHex(D.flash > 0 ? 0x880808 : 0));
+    // crystals heal the dragon through beams
+    const pos = beamGeo.attributes.position.array; let n = 0;
+    for (const c of crystals) {
+      if (!c.alive || Math.hypot(c.x - D.x, c.y - D.y, c.z - D.z) > 45) continue;
+      D.hp = Math.min(D.max, D.hp + dt * 0.6);
+      pos.set([c.x, c.g.position.y, c.z, D.x, D.y, D.z], n * 6); n++;
+    }
+    beamGeo.setDrawRange(0, n * 2); beamGeo.attributes.position.needsUpdate = true; beams.visible = n > 0;
+    // contact damage (head is ahead of the body)
+    const hx = D.x + Math.sin(D.yaw) * 6, hz = D.z + Math.cos(D.yaw) * 6;
+    const near = Math.min(Math.hypot(player.x - D.x, player.y + 1 - D.y, player.z - D.z), Math.hypot(player.x - hx, player.y + 1 - D.y, player.z - hz));
+    if (near < 3.4 && D.cool <= 0) { D.cool = 1.4; hurtPlayer(4, D.x, D.z, 15); }
+    $("bossBar").style.width = (D.hp / D.max * 100) + "%";
+  }
 
   // ---------- game flow ----------
   function newGame(n) {
@@ -1636,7 +1917,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     distP = null; distPCell = -1; selBlock = 0; mode = "blocks";
     elapsed = 0; dist = 0; hints = 0; kills = 0; hintUntil = 0; hintPath = [];
     flying = false; $("tFly").classList.remove("main");
-    $("portalFx").style.opacity = "0";
+    $("portalFx").style.opacity = "0"; clearEndEntities(); endFrame = null;
     gameMode = "creative"; mine = null; crack.visible = false; touchMine = false;
   }
   function enterMC(gm) {
@@ -1916,18 +2197,19 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       }
     }
     jumpQ = false;
-    if (player.y < -5) Object.assign(player, { x: spawn.x, z: spawn.z, y: spawn.y, vy: 0 });
+    if (player.y < -5) { if (survival()) hurtPlayer(20, player.x + 0.01, player.z, 0); Object.assign(player, { x: spawn.x, z: spawn.z, y: spawn.y, vy: 0 }); }
     const moved = Math.hypot(player.x - ox, player.z - oz);
     dist += moved; if (player.onGround) bob += moved * 2.4;
     if (moved > 0 || !player.onGround) reveal();
     if (standingOn(player) === LAVA + 1 && now - player.hurtT > 0.6) hurtPlayer(2, player.x + 0.01, player.z, 0);
     if (!survival() && now - player.hurtT > 4 && player.hp < 10) player.hp = Math.min(10, player.hp + dt * 0.6);
     if (survival()) survivalTick(dt, moved, run);
+    if (worldKind === "mc" && mcGet(Math.floor(player.x), Math.floor(player.y + 0.2), Math.floor(player.z)) === END_PORTAL) { travel(dim === "end" ? "over" : "end"); return; }
     if (worldKind === "mc") {
-      const inPortal = [0.3, 1.2].some((h) => mcGet(Math.floor(player.x), Math.floor(player.y + h), Math.floor(player.z)) === PORTAL);
+      const inPortal = dim !== "end" && [0.3, 1.2].some((h) => mcGet(Math.floor(player.x), Math.floor(player.y + h), Math.floor(player.z)) === PORTAL);
       if (inPortal && !needExit) {
         portalT += dt;
-        if (portalT >= (survival() ? 2.5 : 1)) { travel(); return; }
+        if (portalT >= (survival() ? 2.5 : 1)) { travel(dim === "over" ? "nether" : "over"); return; }
       } else { portalT = 0; if (!inPortal) needExit = false; }
       $("portalFx").style.opacity = String(Math.min(1, portalT / (survival() ? 2.5 : 1)));
     }
@@ -2048,10 +2330,11 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       updatePlayer(dt, now);
       updateMonsters(dt, now);
       updateEffects(dt, now);
+      if (worldKind === "mc") updateEnd(dt, now);
       $("tTime").textContent = fmt(elapsed);
       $("hpBar").style.width = (player.hp * 10) + "%";
       if (worldKind === "mc") {
-        $("tSub").textContent = (dim === "nether" ? "Nether · " : "") + `X ${Math.floor(player.x)} · Y ${Math.floor(player.y)} · Z ${Math.floor(player.z)}` + (flying ? " · полёт" : "") + (survival() && dim === "over" ? (dayF > 0.35 ? " · день" : " · ночь") : "");
+        $("tSub").textContent = (dim === "nether" ? "Nether · " : dim === "end" ? "Энд · " : "") + `X ${Math.floor(player.x)} · Y ${Math.floor(player.y)} · Z ${Math.floor(player.z)}` + (flying ? " · полёт" : "") + (survival() && dim === "over" ? (dayF > 0.35 ? " · день" : " · ночь") : "");
         $("tMob").textContent = `Монстров: ${monsters.length}`;
       } else {
       const gx = Math.floor(player.x / S), gz = Math.floor(player.z / S);
