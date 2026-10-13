@@ -175,7 +175,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       <dt>V или 2× Пробел</dt><dd>полёт: Пробел — вверх, C — вниз, Shift — быстрее</dd>
       <dt>ЛКМ или E</dt><dd>поставить блок или призвать монстра туда, куда смотрите</dd>
       <dt>ПКМ или F</dt><dd>ударить монстра или сломать поставленный блок</dd>
-      <dt>Мир Minecraft</dt><dd>как в оригинале: ЛКМ — ломать и бить (можно зажать), ПКМ — ставить, в воде Пробел — плыть вверх</dd>
+      <dt>Мир Minecraft</dt><dd>как в оригинале: ЛКМ — ломать и бить (можно зажать), ПКМ — ставить. Вода и лава растекаются, а где встречаются, застывают камнем. В воде Пробел — плыть вверх</dd>
       <dt>1–8 · колесо · Q</dt><dd>выбрать блок или монстра · переключить блоки и монстров</dd>
       <dt>M · H · Esc</dt><dd>карта · подсказка (+20 с) · пауза</dd>
       <dt>Телефон</dt><dd>левая половина — джойстик, правая — обзор, кнопки справа</dd>
@@ -445,7 +445,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   let elapsed = 0, dist = 0, hints = 0, kills = 0, hintUntil = 0, hintPath = [], bob = 0, shake = 0;
   let mode = "blocks", selBlock = 0, selMob = 0, aggressive = true;
   let flying = false, airJumps = 1, lastSpace = 0, touchUp = false, touchDown = false;
-  let worldKind = "maze", holdBtn = -1, holdT = 0, underwater = false;
+  let worldKind = "maze", holdBtn = -1, holdT = 0, underwater = 0;
   const spawn = { x: 0, y: 0, z: 0 };
   const blocks = new Map(); // voxel key -> block type index
   let tnts = []; // {k, x, y, z, t}
@@ -816,15 +816,18 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
 
   // ---------- Minecraft world ----------
   const MC_W = 128, MC_H = 48, CH = 16, SEA = 14;
-  const WATER = 18, BEDROCK = 17, MC_TNT = 8, LEAVES = 12;
-  let vox = new Uint8Array(0), mcChunks = [], clouds = null;
+  const WATER = 18, BEDROCK = 17, MC_TNT = 8, LEAVES = 12, MC_LAVA = 7;
+  let vox = new Uint8Array(0), fl = new Uint8Array(0), mcChunks = [], clouds = null;
+  // fluid level per voxel: 0 = source, 1..7 = flowing (distance from source), 8 = falling
+  const fluidQ = { [WATER]: new Set(), [MC_LAVA]: new Set() };
+  let fluidAcc = 0, lavaTicks = 0;
   const vi = (x, y, z) => (y * MC_W + z) * MC_W + x;
   function mcGet(x, y, z) { if (x < 0 || z < 0 || x >= MC_W || z >= MC_W || y < 0 || y >= MC_H || !vox.length) return 0; return vox[vi(x, y, z)]; }
   function mcSolid(x, y, z) {
     if (y < 0 || x < 0 || z < 0 || x >= MC_W || z >= MC_W) return -1;
     if (y >= MC_H) return 0;
     const v = vox[vi(x, y, z)];
-    if (v === 0 || v === WATER) return 0;
+    if (v === 0 || v === WATER || v === MC_LAVA) return 0;
     return v === BEDROCK ? -1 : v;
   }
 
@@ -889,9 +892,15 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function needFace(id, n) {
     if (n === 0) return true;
     if (n === id) return id === LEAVES;
+    if (n === WATER || n === MC_LAVA) return true;
     const nk = MCB[n].kind;
     if (MCB[id].kind === "clear") return nk === "cut";
     return nk === "clear" || nk === "cut";
+  }
+  function fluidH(x, y, z, id) {
+    if (mcGet(x, y + 1, z) === id) return 1;
+    const L = fl[vi(x, y, z)];
+    return L === 0 ? 0.88 : L === 8 ? 1 : Math.max(0.15, (8 - L) / 9);
   }
   function buildChunk(cx, cz) {
     const key = cz * (MC_W / CH) + cx;
@@ -901,14 +910,16 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     for (let y = 0; y < MC_H; y++) for (let z = cz * CH; z < cz * CH + CH; z++) for (let x = cx * CH; x < cx * CH + CH; x++) {
       const id = vox[vi(x, y, z)]; if (!id) continue;
       const d = MCB[id], b = B[d.kind === "cut" ? "opaque" : d.kind];
+      const fluid = id === WATER || id === MC_LAVA, topH = fluid ? fluidH(x, y, z, id) : 1;
       for (let f = 0; f < 6; f++) {
         const F = FACES[f], ny = y + F.dir[1];
         const n = ny < 0 ? 1 : mcGet(x + F.dir[0], ny, z + F.dir[2]);
-        if (!needFace(id, n)) continue;
+        const step = fluid && n === id && f !== 2 && f !== 3 && fluidH(x + F.dir[0], y, z + F.dir[2], id) < topH - 0.01;
+        if (!needFace(id, n) && !(f === 3 && topH < 1 && n !== id) && !step) continue;
         const tile = f === 3 ? d.t[0] : f === 2 ? d.t[2] : d.t[1];
         const tu = tile % AT_C, tv = Math.floor(tile / AT_C), base = b.p.length / 3;
         for (const c of F.c) {
-          b.p.push(x + c[0], y + c[1], z + c[2]); b.n.push(F.dir[0], F.dir[1], F.dir[2]);
+          b.p.push(x + c[0], y + (c[1] ? topH : 0), z + c[2]); b.n.push(F.dir[0], F.dir[1], F.dir[2]);
           b.u.push((tu + 0.002 + c[3] * 0.996) / AT_C, 1 - (tv + 1 - 0.002 - c[4] * 0.996) / AT_R);
           b.c.push(F.shade, F.shade, F.shade);
         }
@@ -941,17 +952,80 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function flushChunks() { dirty.forEach((k) => { const [a, b] = k.split(",").map(Number); buildChunk(a, b); }); dirty.clear(); }
   function mcSet(x, y, z, id) {
     if (x < 0 || z < 0 || x >= MC_W || z >= MC_W || y < 0 || y >= MC_H) return;
-    vox[vi(x, y, z)] = id; dirtyChunk(x, z); mcColumn(x, z); flushChunks();
+    const j = vi(x, y, z); vox[j] = id; fl[j] = 0;
+    dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z); flushChunks();
   }
   function mcBlast(cx, cy, cz) {
     for (let x = Math.floor(cx - 3); x <= cx + 3; x++) for (let y = Math.floor(cy - 3); y <= cy + 3; y++) for (let z = Math.floor(cz - 3); z <= cz + 3; z++) {
       if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy, z + 0.5 - cz) > 3.2 + Math.random() * 0.6) continue;
       const id = mcGet(x, y, z);
-      if (!id || id === BEDROCK || id === WATER) continue;
+      if (!id || id === BEDROCK || id === WATER || id === MC_LAVA) continue;
       if (id === MC_TNT) { const k = vkey(x, y, z), t = tnts.find((q) => q.k === k); if (t) { t.t = Math.min(t.t, 0.25); continue; } }
-      vox[vi(x, y, z)] = 0; dirtyChunk(x, z); mcColumn(x, z);
+      vox[vi(x, y, z)] = 0; dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z);
     }
     flushChunks();
+  }
+
+  // ---------- flowing water and lava ----------
+  const D4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const inMC = (x, y, z) => x >= 0 && z >= 0 && x < MC_W && z < MC_W && y >= 0 && y < MC_H;
+  function schedule(x, y, z) { if (!inMC(x, y, z)) return; const j = vi(x, y, z), v = vox[j]; if (v === WATER || v === MC_LAVA) fluidQ[v].add(j); }
+  function scheduleAround(x, y, z) {
+    schedule(x, y, z); schedule(x, y + 1, z); schedule(x, y - 1, z);
+    for (const [dx, dz] of D4) schedule(x + dx, y, z + dz);
+  }
+  function setRaw(x, y, z, id, level) {
+    const j = vi(x, y, z); vox[j] = id; fl[j] = level;
+    dirtyChunk(x, z); mcColumn(x, z); scheduleAround(x, y, z);
+  }
+  // lava meets water: a lava source hardens to stone, flowing lava to cobblestone
+  function harden(x, y, z) { const j = vi(x, y, z); setRaw(x, y, z, fl[j] === 0 ? 1 : 13, 0); burst(x + 0.5, y + 0.9, z + 0.5, 0xdddddd, 5, 1.5); }
+  function stepFluid(j, F) {
+    if (vox[j] !== F) return;
+    const x = j % MC_W, z = ((j / MC_W) | 0) % MC_W, y = (j / (MC_W * MC_W)) | 0;
+    const MAX = F === WATER ? 7 : 3, other = F === WATER ? MC_LAVA : WATER;
+    if (F === MC_LAVA) {
+      if (mcGet(x, y + 1, z) === WATER || D4.some(([dx, dz]) => mcGet(x + dx, y, z + dz) === WATER)) { harden(x, y, z); return; }
+    }
+    let lv = fl[j];
+    if (lv !== 0) {
+      let want;
+      if (mcGet(x, y + 1, z) === F) want = 8;
+      else {
+        let best = 99;
+        for (const [dx, dz] of D4) { if (mcGet(x + dx, y, z + dz) === F) { const e = fl[vi(x + dx, y, z + dz)]; best = Math.min(best, e === 8 ? 0 : e); } }
+        want = best + 1;
+      }
+      if (want > MAX) { setRaw(x, y, z, 0, 0); return; }
+      if (want !== lv) { setRaw(x, y, z, F, want); lv = want; }
+    }
+    if (y > 0) {
+      const b = mcGet(x, y - 1, z), bj = vi(x, y - 1, z);
+      if (b === 0) { setRaw(x, y - 1, z, F, 8); return; }
+      if (b === other) { if (b === MC_LAVA) harden(x, y - 1, z); else setRaw(x, y - 1, z, 13, 0); return; }
+      if (b === F && fl[bj] !== 0) { if (fl[bj] !== 8) setRaw(x, y - 1, z, F, 8); return; }
+    }
+    const nl = (lv === 8 ? 0 : lv) + 1;
+    if (nl > MAX) return;
+    for (const [dx, dz] of D4) {
+      const nx = x + dx, nz = z + dz; if (!inMC(nx, y, nz)) continue;
+      const v = mcGet(nx, y, nz), nj = vi(nx, y, nz);
+      if (v === 0) setRaw(nx, y, nz, F, nl);
+      else if (v === F && fl[nj] !== 0 && fl[nj] !== 8 && fl[nj] > nl) setRaw(nx, y, nz, F, nl);
+      else if (v === other) { if (v === MC_LAVA) harden(nx, y, nz); else setRaw(nx, y, nz, 13, 0); }
+    }
+  }
+  function fluidTick(F) {
+    const q = fluidQ[F]; if (!q.size) return;
+    const list = Array.from(q); q.clear();
+    for (let i = 0; i < list.length; i++) { if (i > 700) { q.add(list[i]); continue; } stepFluid(list[i], F); }
+    flushChunks();
+  }
+  function fluidStep(dt) {
+    fluidAcc += dt;
+    if (fluidAcc < 0.2) return;
+    fluidAcc = 0; fluidTick(WATER);
+    if (++lavaTicks >= 4) { lavaTicks = 0; fluidTick(MC_LAVA); }
   }
 
   // top-down colour map for the minimap
@@ -989,7 +1063,8 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
   function fbm(x, z, s, oct) { let t = 0, amp = 1, f = 1, sum = 0; for (let i = 0; i < oct; i++) { t += vnoise(x * f, z * f, s + i * 31) * amp; sum += amp; amp *= 0.5; f *= 2; } return t / sum; }
   function mcGenerate() {
-    vox = new Uint8Array(MC_W * MC_W * MC_H);
+    vox = new Uint8Array(MC_W * MC_W * MC_H); fl = new Uint8Array(vox.length);
+    fluidQ[WATER].clear(); fluidQ[MC_LAVA].clear();
     const seed = (Math.random() * 1e9) | 0, hm = new Int32Array(MC_W * MC_W);
     for (let z = 0; z < MC_W; z++) for (let x = 0; x < MC_W; x++) {
       const base = fbm(x / 44, z / 44, seed, 4), hills = Math.pow(fbm(x / 80, z / 80, seed + 7, 2), 2.4);
@@ -1076,7 +1151,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   function resetCommon(kind) {
     clearMonsters(); clearBlocks(); tnts = [];
     particles.forEach((p) => scene.remove(p.p)); particles = [];
-    disposeWorld(); worldKind = kind; applyAtmosphere(kind); underwater = false;
+    disposeWorld(); worldKind = kind; applyAtmosphere(kind); underwater = 0;
     distP = null; distPCell = -1; selBlock = 0; mode = "blocks";
     elapsed = 0; dist = 0; hints = 0; kills = 0; hintUntil = 0; hintPath = [];
     flying = false; $("tFly").classList.remove("main");
@@ -1316,7 +1391,9 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (stick.id !== null) { f -= stick.vy; s += stick.vx; }
     const len = Math.hypot(f, s); if (len > 1) { f /= len; s /= len; }
     const run = keys.has("ShiftLeft") || keys.has("ShiftRight") || touchRun;
-    const inWater = worldKind === "mc" && !flying && mcGet(Math.floor(player.x), Math.floor(player.y + 0.4), Math.floor(player.z)) === WATER;
+    const fluidHere = worldKind === "mc" && !flying ? mcGet(Math.floor(player.x), Math.floor(player.y + 0.4), Math.floor(player.z)) : 0;
+    const inWater = fluidHere === WATER || fluidHere === MC_LAVA;
+    if (fluidHere === MC_LAVA && now - player.hurtT > 0.6) hurtPlayer(2, player.x + 0.01, player.z, 0);
     const sp = (run ? RUN : WALK) * dt * (flying ? 1.8 : inWater ? 0.6 : 1), sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
     const dx = (-sin * f + cos * s) * sp + player.kx * dt, dz = (-cos * f - sin * s) * sp + player.kz * dt;
     const decay = Math.pow(0.004, dt); player.kx *= decay; player.kz *= decay;
@@ -1397,7 +1474,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       } else {
         physics(m, mvx * dt, mvz * dt, dt);
         if (m.hitWall) { if (ty.climb) m.vy = Math.max(m.vy, 4); else if (m.onGround && !ty.hop) m.vy = JUMP * 0.95; }
-        if (standingOn(m) === LAVA + 1) { m.hp -= dt * 3; m.flash = 0.1; }
+        if (standingOn(m) === LAVA + 1 || (worldKind === "mc" && mcGet(Math.floor(m.x), Math.floor(m.y + 0.2), Math.floor(m.z)) === MC_LAVA)) { m.hp -= dt * 3; m.flash = 0.1; }
       }
       for (let j = 0; j < i; j++) {
         const o = monsters[j], sx = m.x - o.x, sz = m.z - o.z, dd = Math.hypot(sx, sz), min = m.r + o.r;
@@ -1469,6 +1546,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       $("tSub").textContent = `${Math.round(dist)} м пройдено · ${G}×${G}` + (now < hintUntil && left >= 0 ? ` · до выхода ${left * S} м` : "") + (flying ? " · полёт" : "");
       $("tMob").textContent = `Монстров: ${monsters.length} · блоков: ${blocks.size}`;
       }
+      if (worldKind === "mc") fluidStep(dt);
       if (holdBtn >= 0 && worldKind === "mc" && document.pointerLockElement === canvas) { holdT -= dt; if (holdT <= 0) { holdT = 0.22; clickAct(holdBtn); } }
     } else if (state === "menu") {
       player.yaw += dt * 0.06;
@@ -1489,8 +1567,13 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       }
       if (worldKind === "mc") {
         if (clouds) clouds.material.map.offset.x = now * 0.004;
-        const uw = mcGet(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)) === WATER;
-        if (uw !== underwater) { underwater = uw; if (uw) { scene.fog.color.setHex(0x22508f); scene.background.setHex(0x22508f); scene.fog.near = 0.5; scene.fog.far = 14; } else applyAtmosphere("mc"); }
+        const cv = mcGet(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z));
+        const uw = cv === WATER ? 1 : cv === MC_LAVA ? 2 : 0;
+        if (uw !== underwater) {
+          underwater = uw;
+          if (uw) { const c = uw === 1 ? 0x22508f : 0xd9480f; scene.fog.color.setHex(c); scene.background.setHex(c); scene.fog.near = uw === 1 ? 0.5 : 0.1; scene.fog.far = uw === 1 ? 14 : 2.5; }
+          else applyAtmosphere("mc");
+        }
       }
       swing = Math.max(0, swing - dt);
       hand.rotation.x = 0.3 - Math.sin((swing / 0.25) * Math.PI) * 0.9;
