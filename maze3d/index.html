@@ -882,10 +882,11 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (hit && hit.t <= 4.5) {
       if (hit.type > 0 && worldKind === "mc") {
         const k = vkey(hit.x, hit.y, hit.z); tnts = tnts.filter((q) => q.k !== k);
+        if (hit.type === 29) play67();
         burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, MCB[hit.type].color, 8, 3); mcSet(hit.x, hit.y, hit.z, 0);
       }
       else if (hit.type < 0 && worldKind === "mc") toast("Этот блок не ломается");
-      else if (hit.type > 0) { const b = hit.type - 1; setBlock(hit.x, hit.y, hit.z, null); burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, b === TNT ? 0xc4302a : 0x9a8f80, 8, 3); }
+      else if (hit.type > 0) { const b = hit.type - 1; if (BLOCKS[b].id === "six") play67(); setBlock(hit.x, hit.y, hit.z, null); burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, b === TNT ? 0xc4302a : 0x9a8f80, 8, 3); }
       else if (hit.y >= 0) toast("Стены лабиринта прочные. Их берёт только динамит");
     }
   }
@@ -1573,6 +1574,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     if (mine.p >= 1) {
       const drop = dropFor(id), k = vkey(hit.x, hit.y, hit.z);
       tnts = tnts.filter((q) => q.k !== k);
+      if (id === 29) play67();
       burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, MCB[id].color, 8, 3);
       mcSet(hit.x, hit.y, hit.z, 0);
       if (drop) give(drop, 1);
@@ -1957,6 +1959,22 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
   }
 
   // ---------- 6 7 ----------
+  // the player's own recording plays when a 67 block is broken (published next to the page as sound67.mp3)
+  let actx = null, snd67 = null, snd67Src = null;
+  const snd67Data = fetch("sound67.mp3").then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  function play67() {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === "suspended") actx.resume();
+      const go = (buf) => {
+        if (!buf) return;
+        if (snd67Src) { try { snd67Src.stop(); } catch (e) {} }
+        snd67Src = actx.createBufferSource(); snd67Src.buffer = buf; snd67Src.connect(actx.destination); snd67Src.start();
+      };
+      if (snd67) return go(snd67);
+      snd67Data.then((ab) => (ab ? actx.decodeAudioData(ab.slice(0)) : null)).then((b) => { snd67 = b; go(b); }).catch(() => {});
+    } catch (e) {}
+  }
   let lastSix = 0, sixT = 0;
   function sixSeven() {
     const el = $("six");
