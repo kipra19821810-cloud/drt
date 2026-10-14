@@ -2576,7 +2576,7 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
     const c = idx(pgx, pgz);
     if (c === distPCell) return;
     distPCell = c;
-    distP = bfs(pgx, pgz, 70);
+    distP = bfs(pgx, pgz); // whole maze: monsters find you from anywhere
   }
 
   const lerpAngle = (a, b, t) => { const d = ((b - a + Math.PI) % TAU + TAU) % TAU - Math.PI; return a + d * Math.min(1, t); };
@@ -2586,14 +2586,14 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       const m = monsters[i], ty = m.type;
       m.cool -= dt; m.flash -= dt;
       const d = Math.hypot(player.x - m.x, player.z - m.z);
-      let tx = player.x, tz = player.z, chase = aggressive && d < 90;
+      let tx = player.x, tz = player.z, chase = aggressive; // monsters see you across the whole map
       if (chase && !ty.fly && d > 2.5 && distP) {
         const mgx = Math.floor(m.x / S), mgz = Math.floor(m.z / S);
         if (mgx >= 0 && mgz >= 0 && mgx < G && mgz < G && m.y < 0.5) {
           const dm = distP[idx(mgx, mgz)];
           if (dm > 0) {
             for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (distP[idx(mgx + ax, mgz + az)] === dm - 1) { tx = cc(mgx + ax); tz = cc(mgz + az); break; }
-          } else if (dm < 0) chase = d < 8;
+          }
         }
       }
       if (!chase) {
@@ -2661,7 +2661,6 @@ h2 { font-size: clamp(34px, 7vw, 48px); }
       const fl = m.flash > 0;
       m.mats.forEach((mm) => mm.emissive.setHex(fl ? 0xaa1a10 : mm.userData.base));
       if (aggressive && ty.dmg > 0 && m.cool <= 0 && d < m.r + PR + 0.45 && m.y < player.y + PH && m.y + m.h > player.y) { hurtPlayer(ty.dmg, m.x, m.z, ty.id === "golem" ? 12 : 6); m.cool = 1; if (ty.id === "reaper" && !godMode) toast("Жнец забрал вас с первого удара"); }
-      if (m.natural && d > 48) { killMonster(i, true); continue; }
       if (m.hp <= 0 || m.y < -10) killMonster(i);
     }
   }
